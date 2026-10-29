@@ -31,8 +31,22 @@ export function lookupBuiltin(location) {
   return hits.length ? hits.map(h => ({ name: h, c: PLACES[h] })) : null;
 }
 
+/** Ortstext säubern: Ländercodes, Klammern, „Hybrid/Remote“, mehrere Orte → Liste möglicher Orte. */
+export function cleanLocation(loc) {
+  return String(loc || '').replace(/\(.*?\)/g, ' ').replace(/\b(hybrid|remote|homeoffice|home office|mobil|vor ort|on-?site|deutschlandweit|bundesweit)\b/gi, ' ')
+    .replace(/\bDE\s*[-–]\s*/g, '').replace(/,\s*(DE|DEU|Deutschland|Germany|Nordrhein-Westfalen|NRW|NW)\b/gi, '').replace(/\b\d{5}\b/g, ' ')
+    .split(/\s*[;|•·\/]\s*|\s+und\s+|\s+oder\s+/i).map(x => x.replace(/\s+/g, ' ').trim()).filter(x => x.length > 2);
+}
+
 export async function distanceFor(location, home, cache, { fetchImpl = fetch, online = true } = {}) {
   if (!location) return null;
+  const parts = cleanLocation(location);
+  if (parts.length > 1 || (parts[0] && parts[0] !== String(location).trim())) {
+    // jeden Teilort einzeln bewerten, der nächste zählt
+    let best = null;
+    for (const part of parts) { const d = await distanceFor(part, home, cache, { fetchImpl, online }); if (d != null && (best == null || d < best)) best = d; }
+    if (best != null) return best;
+  }
   const h = [home.lat, home.lon];
   const hits = lookupBuiltin(location);
   if (hits) return Math.min(...hits.map(x => haversine(h, x.c)));

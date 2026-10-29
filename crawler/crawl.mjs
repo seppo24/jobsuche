@@ -2,7 +2,7 @@
 import crypto from 'node:crypto';
 import { chromium } from 'playwright';
 import { makeStore } from './lib/dropbox.mjs';
-import { crawlEmployer, fetchDescription } from './lib/extract.mjs';
+import { crawlEmployer, fetchDescription, fetchJobLocation } from './lib/extract.mjs';
 import { crawlBA } from './lib/adapters.mjs';
 import { distanceFor } from './lib/geo.mjs';
 
@@ -103,7 +103,7 @@ for (const emp of todo) {
     const id = jobId(emp.id, it.url);
     const old = prevById.get(id);
     jobs.push({
-      id, employerId: emp.id, employer: it.employer || emp.name, title: it.title, url: it.url, location: it.location || '', meta: (it.meta || '').slice(0, 200),
+      id, employerId: emp.id, employer: it.employer || emp.name, title: it.title, url: it.url, location: it.location || old?.location || '', locChecked: old?.locChecked, meta: (it.meta || '').slice(0, 200),
       postedAt: it.postedAt || '', distanceKm: it.distanceKm ?? old?.distanceKm, description: old?.description,
       firstSeen: old?.firstSeen || NOW, lastSeen: NOW, source: r.test.method,
     });
@@ -114,6 +114,20 @@ const touched = new Set(todo.map(e => e.id));
 const alive = new Set(employers.map(e => e.id));
 for (const j of prev.jobs || []) if (!touched.has(j.employerId) && alive.has(j.employerId)) jobs.push(j);
 for (const k of Object.keys(sources)) if (!alive.has(k)) delete sources[k];
+
+// ---- Fehlender Einsatzort: Detailseite der Stelle lesen (höchstens 60 je Lauf, jede Stelle nur einmal) ----
+{
+  const missing = jobs.filter(j => !j.location && !j.locChecked && j.url).slice(0, 60);
+  if (missing.length) {
+    const lctx = await mkContext();
+    let k = 0;
+    await Promise.all(Array.from({ length: Math.min(4, missing.length) }, async () => {
+      while (k < missing.length) { const j = missing[k++]; j.location = (await fetchJobLocation(lctx, j.url)).slice(0, 120); j.locChecked = true; }
+    }));
+    await lctx.close();
+    log(`Einsatzort nachgeladen: ${missing.filter(j => j.location).length} von ${missing.length}`);
+  }
+}
 
 // ---- Entfernungen ----
 let geoCalls = 0;

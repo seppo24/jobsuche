@@ -9,6 +9,27 @@ export function pageScript() {
   const abs = (h) => { try { return new URL(h, location.href).href; } catch { return ''; } };
   const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
   const vis = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+  // ---- Einsatzort aus einer Karte/Zeile herauslesen ----
+  const LOCCLS = /(^|[-_\s])(location|standort|ort|city|stadt|place|loc|einsatzort|arbeitsort|workplace|address|adresse)($|[-_\s])/i;
+  const NOTLOC = /(vollzeit|teilzeit|full[- ]?time|part[- ]?time|unbefristet|befristet|festanstellung|hybrid|remote|homeoffice|home office|mobil|ausbildung|praktikum|werkstudent|m\/w|w\/m|\d{1,2}\.\d{1,2}\.\d{2,4}|vor \d+ (tag|woche|stunde)|bewerben|neu\b|new\b|referenz|job-?id|req)/i;
+  const placeLike = (t) => t.length >= 3 && t.length <= 70 && /^[A-ZÄÖÜ(]/.test(t) && !NOTLOC.test(t) && !JOBWORDS.test(t) && (t.match(/\d/g) || []).length <= 5;
+  const rowLocation = (row, title) => {
+    if (!row) return '';
+    const els = [row, ...row.querySelectorAll('*')].slice(0, 80);
+    for (const e of els) {
+      const key = [e.className && e.className.baseVal === undefined ? e.className : '', e.getAttribute && e.getAttribute('itemprop'), e.getAttribute && e.getAttribute('data-location'), e.getAttribute && e.getAttribute('aria-label')].join(' ');
+      if (e !== row && (/(addressLocality|jobLocation|location)/i.test(e.getAttribute('itemprop') || '') || LOCCLS.test(key) || e.getAttribute('data-location'))) {
+        const t = clean(e.getAttribute('data-location') || e.innerText || e.textContent).replace(/^(standort|ort|location|einsatzort|arbeitsort)\s*[:·-]?\s*/i, '');
+        if (t && t.length <= 80 && t !== title) return t;
+      }
+    }
+    const lines = (row.innerText || '').split('\n').map(clean).filter(Boolean).filter(l => l !== title);
+    for (const l of lines) { const m = l.match(/^(?:standort|ort|location|einsatzort|arbeitsort)\s*[:·-]\s*(.{2,70})$/i); if (m) return m[1]; }
+    for (const l of lines) { const m = l.match(/\b\d{5}\s+[A-ZÄÖÜ][\wäöüß.\-]+(?:[ \-][A-ZÄÖÜ][\wäöüß.\-]+)?/); if (m) return m[0]; }
+    for (const l of lines) { const m = l.match(/^DE\s*[-–]\s*(.{2,40})$/i); if (m) return m[1]; }
+    for (const l of lines) if (placeLike(l)) return l;
+    return '';
+  };
   const out = { method: '', items: [], clusterSize: 0, candidates: 0, jsonLd: 0, hint: null, text: '', next: null, title: document.title || '' };
   const body = document.body ? document.body.innerText || '' : '';
   out.text = body.slice(0, 3000);
@@ -53,7 +74,7 @@ export function pageScript() {
       out.method = 'successfactors';
       out.items = sf.map(a => {
         const row = a.closest('tr, li, .data-row') || a.parentElement;
-        const loc = row ? clean((row.querySelector('.jobLocation, .colLocation, .jobFacility, [class*="location" i]') || {}).textContent) : '';
+        const loc = row ? (clean((row.querySelector('.jobLocation, .colLocation, .jobFacility, [class*="location" i]') || {}).textContent) || rowLocation(row, clean(a.textContent))) : '';
         const date = row ? clean((row.querySelector('.jobDate, .colDate, [class*="date" i]') || {}).textContent) : '';
         return { title: clean(a.textContent), url: abs(a.getAttribute('href')), location: loc, meta: date };
       }).filter(x => x.url && !seen.has(x.url) && seen.add(x.url));
@@ -94,7 +115,7 @@ export function pageScript() {
       if (!url || g.seen.has(url)) continue;
       g.seen.add(url);
       const hasWord = JOBWORDS.test(title);
-      g.items.push({ title, url, meta: meta || (rowText && rowText !== title ? rowText.replace(title, '').trim().slice(0, 160) : ''), hasWord });
+      g.items.push({ title, url, loc: rowLocation(row, title), meta: meta || (rowText && rowText !== title ? rowText.replace(title, '').trim().slice(0, 160) : ''), hasWord });
       if (hasWord) g.jobish++;
       groups.set(sig, g);
     }
@@ -109,7 +130,7 @@ export function pageScript() {
     if (best) {
       out.method = 'liste';
       out.clusterSize = best.items.length;
-      out.items = best.items.filter(i => i.hasWord || best.jobish / best.items.length > 0.5).map(({ hasWord, ...r }) => r);
+      out.items = best.items.filter(i => i.hasWord || best.jobish / best.items.length > 0.5).map(({ hasWord, loc, ...r }) => ({ ...r, location: loc || '' }));
     }
   }
 

@@ -117,6 +117,34 @@ export async function fetchDescription(context, url) {
   } catch { return ''; } finally { await page.close().catch(() => {}); }
 }
 
+/** Einsatzort aus der Detailseite einer Stelle lesen (JSON-LD, sonst „Standort: …“ im Text). */
+export async function fetchJobLocation(context, url) {
+  const page = await context.newPage();
+  try {
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 25000 });
+    await settle(page, 4000);
+    await page.evaluate(consentScript).catch(() => {});
+    return await page.evaluate(() => {
+      const clean = t => (t || '').replace(/\s+/g, ' ').trim();
+      for (const sc of document.querySelectorAll('script[type="application/ld+json"]')) {
+        try {
+          const walk = n => Array.isArray(n) ? n.flatMap(walk) : n && typeof n === 'object' ? [n, ...walk(n['@graph'] || [])] : [];
+          const jp = walk(JSON.parse(sc.textContent)).find(x => [].concat(x['@type'] || []).includes('JobPosting'));
+          if (jp) {
+            const locs = [].concat(jp.jobLocation || []).map(l => { const a = l.address || {}; return [a.postalCode, a.addressLocality || (typeof a === 'string' ? a : ''), a.addressRegion].filter(Boolean).join(' '); }).filter(Boolean);
+            if (locs.length) return [...new Set(locs)].join('; ');
+          }
+        } catch { /* weiter */ }
+      }
+      const body = (document.body.innerText || '').slice(0, 20000);
+      const m = body.match(/(?:Standort|Einsatzort|Arbeitsort|Dienstort|Location|Work location|Ort)\s*[:\n]\s*([^\n]{3,80})/i);
+      if (m) return clean(m[1]);
+      const meta = document.querySelector('meta[name="geo.placename"], meta[property="og:locality"], meta[name="job-location"]');
+      return meta ? clean(meta.content) : '';
+    });
+  } catch { return ''; } finally { await page.close().catch(() => {}); }
+}
+
 /** Eine Quelle komplett abarbeiten: Abruf → Erkennung → Bewertung (+ Adress-Vorschläge). */
 export async function crawlEmployer(context, emp, { discover = true, altContext = null } = {}) {
   const t0 = Date.now();

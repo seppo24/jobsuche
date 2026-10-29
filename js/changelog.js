@@ -1,9 +1,19 @@
 // Versionsverlauf – wird in der App unter „Info“ angezeigt.
 // Bei jeder Änderung: neuen Eintrag OBEN einfügen, VERSION erhöhen und in sw.js die CACHE-Version anpassen.
 
-export const VERSION = '1.0.9';
+export const VERSION = '1.0.10';
 
 export const CHANGELOG = [
+  {
+    version: '1.0.10',
+    date: '2026-10-29',
+    title: 'Einsatzort besser erkannt',
+    items: [
+      'Stellenlisten: Der Einsatzort wird aus mehr Schreibweisen gelesen (Klassen wie „location/standort/city“, „Standort: …“, PLZ + Ort, „DE-Köln“, einzelne Ortszeilen neben „Vollzeit“ usw.).',
+      'Fehlt der Ort in der Liste, liest der Abruf ihn aus der Einzelseite der Stelle (strukturierte Daten oder „Einsatzort: …“), höchstens 60 Stellen je Lauf.',
+      'Entfernung: Ortsangaben wie „Wuppertal, Nordrhein-Westfalen, Deutschland“, „Hybrid | Köln / Hagen“ oder „Hagen (DE)“ werden bereinigt; bei mehreren Orten zählt der nächste.',
+    ],
+  },
   {
     version: '1.0.9',
     date: '2026-10-29',
