@@ -1,9 +1,17 @@
 // Versionsverlauf – wird in der App unter „Info“ angezeigt.
 // Bei jeder Änderung: neuen Eintrag OBEN einfügen, VERSION erhöhen und in sw.js die CACHE-Version anpassen.
 
-export const VERSION = '1.0.1';
+export const VERSION = '1.0.2';
 
 export const CHANGELOG = [
+  {
+    version: '1.0.2',
+    date: '2026-10-29',
+    title: 'Updates greifen sofort',
+    items: [
+      'Behoben: Nach „Jetzt aktualisieren“ blieb die alte Version sichtbar, weil veraltete Dateien aus dem Zwischenspeicher geladen wurden.',
+    ],
+  },
   {
     version: '1.0.1',
     date: '2026-10-29',
