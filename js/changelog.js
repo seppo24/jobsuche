@@ -1,9 +1,17 @@
 // Versionsverlauf – wird in der App unter „Info“ angezeigt.
 // Bei jeder Änderung: neuen Eintrag OBEN einfügen, VERSION erhöhen und in sw.js die CACHE-Version anpassen.
 
-export const VERSION = '1.0.10';
+export const VERSION = '1.0.11';
 
 export const CHANGELOG = [
+  {
+    version: '1.0.11',
+    date: '2026-10-29',
+    title: 'Installationshilfe',
+    items: [
+      'Info → Einstellungen → „Installation auf dem Handy“: zeigt, ob der Browser die Installation anbietet, bietet einen Installieren-Knopf und nennt bei Problemen die wahrscheinlichen Ursachen.',
+    ],
+  },
   {
     version: '1.0.10',
     date: '2026-10-29',

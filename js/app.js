@@ -3,6 +3,7 @@ import { S, on, list, seedEmployers, loadCachedJobs, pull } from './store.js';
 import * as dbx from './dropbox.js';
 import { seedPortals } from './portals.js';
 import { toast } from './ui.js';
+import './install.js';
 import { VERSION } from './changelog.js';
 import { followUpState } from './views/applications.js';
 import * as Jobs from './views/jobs.js';

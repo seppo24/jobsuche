@@ -6,11 +6,32 @@ import { synonymsFromText, synonymsToText, DEFAULT_SYNONYMS, DEFAULT_EXCLUDE_STU
 import * as dbx from '../dropbox.js';
 import { aiKey, setAiKey } from './tailor.js';
 import { ghToken, setGhToken, canTrigger, triggerCrawl } from '../portals.js';
+import { inst, isStandalone, browserInfo, runInstall } from '../install.js';
 import { parseEmployerSheet, planEmployerImport, parseStatusSheet, matchEmployer } from '../importers.js';
 
 const copy = async t => { try { await navigator.clipboard.writeText(t); toast('Kopiert', 'ok'); } catch { toast('Kopieren nicht möglich', 'bad'); } };
 const sect = (title, ...kids) => h('details', { class: 'card flat' }, h('summary', { style: 'cursor:pointer;font-weight:600;font-family:var(--font-head);font-size:1.05rem' }, title), h('div', { style: 'margin-top:.75rem' }, kids));
 const lines = t => String(t || '').split(/\n|,/).map(x => x.trim()).filter(Boolean);
+
+function installSection() {
+  const box = h('div');
+  const paint = () => {
+    const b = browserInfo(), sa = isStandalone();
+    mount(box,
+      sa ? h('p', null, h('span', { class: 'pill ok' }, h('i'), 'läuft als installierte App')) :
+      inst.prompt ? h('div', null, h('p', null, h('span', { class: 'pill ok' }, h('i'), 'Installation möglich')), h('button', { class: 'btn primary', type: 'button', onclick: async () => { const r = await runInstall(); toast(r === 'accepted' ? 'Wird installiert …' : 'Abgebrochen'); paint(); } }, 'Jetzt als App installieren')) :
+      h('div', null, h('p', null, h('span', { class: 'pill warn' }, h('i'), 'Dein Browser bietet die Installation gerade nicht an')),
+        h('ul', null,
+          h('li', null, 'Browser erkannt: ', h('b', null, b.name), '. ', b.hint),
+          h('li', null, 'Steht im Menü „Zum Startbildschirm hinzufügen“, aber nicht „App installieren“? Dann legt der Browser nur eine Verknüpfung an – das funktioniert auch.'),
+          h('li', null, 'Chrome bietet nichts an, wenn er die App für schon installiert hält. Prüfe in den Android-Einstellungen unter „Apps“, ob „Jobsuche“ bereits aufgeführt ist, und entferne alte Einträge.'),
+          h('li', null, 'Öffne die Adresse zum Test in einem Chrome-Tab (nicht aus einer anderen App heraus) und lade sie neu.'))),
+      h('p', { class: 'muted small' }, 'Adresse: ', h('span', { class: 'mono' }, location.origin + location.pathname.replace(/index\.html$/, '')), ' · Anzeigemodus: ', sa ? 'App' : 'Browser'));
+  };
+  window.addEventListener('jobsuche-install', paint);
+  paint();
+  return sect('Installation auf dem Handy', box);
+}
 
 function dropboxSection() {
   const key = input({ value: dbx.appKey(), placeholder: 'App-Key aus der Dropbox App Console', autocomplete: 'off' });
@@ -137,5 +158,5 @@ export function render(el) {
     h('h2', null, 'Versionsverlauf'),
     CHANGELOG.map((c, i) => h('details', { class: 'log', open: i === 0 }, h('summary', null, 'Version ' + c.version, h('span', { class: 'muted small' }, fmtDate(c.date) + ' · ' + c.title)), h('ul', null, c.items.map(x => h('li', null, x))))),
     h('h2', { style: 'margin-top:1.5rem' }, 'Einstellungen'),
-    dropboxSection(), profileSection(), searchSection(), crawlerSection(), aiSection(), dataSection());
+    installSection(), dropboxSection(), profileSection(), searchSection(), crawlerSection(), aiSection(), dataSection());
 }
