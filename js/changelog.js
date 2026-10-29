@@ -1,9 +1,17 @@
 // Versionsverlauf – wird in der App unter „Info“ angezeigt.
 // Bei jeder Änderung: neuen Eintrag OBEN einfügen, VERSION erhöhen und in sw.js die CACHE-Version anpassen.
 
-export const VERSION = '1.0.0';
+export const VERSION = '1.0.1';
 
 export const CHANGELOG = [
+  {
+    version: '1.0.1',
+    date: '2026-10-29',
+    title: 'Installation auf dem Handy',
+    items: [
+      'Eigene App-Kennung, damit Android die Jobsuche nicht mit anderen Apps desselben GitHub-Kontos verwechselt.',
+    ],
+  },
   {
     version: '1.0.0',
     date: '2026-10-29',
