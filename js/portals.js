@@ -1,6 +1,7 @@
 // Jobportale: Suchlinks (Stepstone, LinkedIn, Indeed, XING, Bundesagentur) und Anstoßen des Crawlers.
 import { lsGet, lsSet } from './util.js';
-import { S, put, settings } from './store.js';
+import { S, put, settings, flush, pullJobs } from './store.js';
+import * as dbx from './dropbox.js';
 
 const slug = s => String(s || '').toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const nearest = (v, steps) => steps.reduce((a, b) => (Math.abs(b - v) < Math.abs(a - v) ? b : a));
@@ -49,6 +50,7 @@ export function canTrigger() { const g = settings().github || {}; return !!(g.ow
 export async function triggerCrawl(only = '') {
   const g = settings().github || {};
   if (!canTrigger()) throw new Error('Unter Info → Einstellungen → „Automatischer Abruf“ GitHub-Konto, Repository und Zugriffstoken eintragen.');
+  if (dbx.isConnected()) await flush().catch(() => {}); // geänderte Adressen müssen vor dem Abruf in der Dropbox liegen
   const r = await fetch(`https://api.github.com/repos/${g.owner}/${g.repo}/actions/workflows/crawl.yml/dispatches`, {
     method: 'POST', headers: { Authorization: 'Bearer ' + ghToken(), Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
     body: JSON.stringify({ ref: g.branch || 'main', inputs: { only: only || '' } }),
@@ -58,4 +60,20 @@ export async function triggerCrawl(only = '') {
     throw new Error(`GitHub: ${m || 'HTTP ' + r.status}${r.status === 404 ? ' – Repository, Workflow „crawl.yml“ oder Token-Rechte (Actions: Read and write) prüfen.' : ''}`);
   }
   return true;
+}
+
+// ---- Auf das Ergebnis eines gestarteten Abrufs warten (jobs.json in der Dropbox wird neu geschrieben) ----
+let watching = false;
+export const isWatching = () => watching;
+export function watchForResult(onDone, { everyMs = 20000, maxMs = 15 * 60000 } = {}) {
+  if (watching) return;
+  watching = true;
+  const before = S.jobs.generatedAt, t0 = Date.now();
+  const tick = async () => {
+    try { await pullJobs(); } catch { /* nächster Versuch */ }
+    if (S.jobs.generatedAt !== before) { watching = false; onDone(true); return; }
+    if (Date.now() - t0 > maxMs) { watching = false; onDone(false); return; }
+    setTimeout(tick, everyMs);
+  };
+  setTimeout(tick, everyMs);
 }

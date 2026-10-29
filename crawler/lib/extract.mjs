@@ -84,12 +84,15 @@ export async function fetchDescription(context, url) {
 }
 
 /** Eine Quelle komplett abarbeiten: Abruf → Erkennung → Bewertung (+ Adress-Vorschläge). */
-export async function crawlEmployer(context, emp, { discover = true } = {}) {
+export async function crawlEmployer(context, emp, { discover = true, altContext = null } = {}) {
   const t0 = Date.now();
   let raw;
   try {
     if (isWorkday(emp.url) && emp.adapter !== 'generic') raw = await crawlWorkday(emp.url);
-    else raw = await crawlPage(context, emp.url);
+    else {
+      raw = await crawlPage(context, emp.url);
+      if (raw.error && /ERR_HTTP2|ERR_SPDY|ERR_QUIC/.test(raw.error) && altContext) raw = await crawlPage(await altContext(), emp.url); // zweiter Versuch ohne HTTP/2
+    }
   } catch (e) { raw = { items: [], error: e.message, httpStatus: 0, finalUrl: emp.url, method: '', text: '' }; }
 
   const test = evaluate({ ...raw, startUrl: emp.url });

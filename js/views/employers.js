@@ -1,7 +1,7 @@
 import { h, uid, fmtRel, hostOf, normUrl, debounce, lsGet, lsSet } from '../util.js';
 import { S, list, get, put, del, settings } from '../store.js';
 import { sheet, toast, confirmDialog, field, input, textarea, select, statusPill, emptyState, mount } from '../ui.js';
-import { PORTAL_TYPES, canTrigger, triggerCrawl, searchUrl } from '../portals.js';
+import { PORTAL_TYPES, canTrigger, triggerCrawl, searchUrl, watchForResult, isWatching } from '../portals.js';
 
 const testOf = id => S.jobs.sources?.[id]?.test || S.jobs.sources?.[id] || null;
 const countOf = id => (S.jobs.jobs || []).filter(j => j.employerId === id).length;
@@ -10,11 +10,13 @@ export const isStale = (e, t) => !!(t && t.url && !sameUrl(t.url, e.url));
 const f = lsGet('jobsuche.empview', { q: '', kind: 'alle' });
 
 function testPanel(e, test, close) {
+  const blocked = ['blockiert', 'fehler'].includes(test?.status) && !e.baSearch && e.kind !== 'portal';
   if (!test) return h('div', { class: 'banner info' }, 'Diese Quelle wurde noch nicht abgerufen. Der nächste automatische Lauf prüft sie – oder starte den Test jetzt.');
   const sug = test.suggestions || [];
   return h('div', null,
     h('div', { class: 'row' }, statusPill(test.status, test.message), test.confidence && test.confidence !== 'keine' ? h('span', { class: 'chip' }, 'Sicherheit: ' + test.confidence) : null, test.method ? h('span', { class: 'chip' }, 'Erkennung: ' + methodName(test.method)) : null, h('span', { class: 'muted small' }, test.checkedAt ? 'geprüft ' + fmtRel(test.checkedAt) : '')),
     test.message ? h('p', { style: 'margin-top:.5rem' }, test.message) : null,
+    blocked ? h('div', { class: 'banner' }, 'Die Karriereseite lässt sich nicht automatisch abrufen. ', h('button', { class: 'btn small', type: 'button', onclick: () => { put('employers', { ...e, baSearch: true }); toast('Ab dem nächsten Abruf werden die Stellen über die Bundesagentur gesucht.', 'ok'); close(); } }, 'Stellen über die Bundesagentur suchen')) : null,
     (test.checks || []).length ? h('ul', { class: 'checks', style: 'margin-top:.5rem' }, test.checks.map(c => h('li', null, h('span', { class: 'm ' + (c.ok === true ? 'y' : c.ok === false ? 'n' : 'q') }, c.ok === true ? '✓' : c.ok === false ? '✗' : '?'), c.text))) : null,
     (test.sample || []).length ? [h('h3', null, `Stichprobe (${test.count ?? test.sample.length} Stellen insgesamt)`), h('ul', { class: 'sample' }, test.sample.map(x => h('li', null, x.url ? h('a', { href: x.url, target: '_blank', rel: 'noopener noreferrer' }, x.title) : x.title, x.location ? h('span', { class: 'muted small' }, ' · ' + x.location) : null)))] : null,
     sug.length ? [h('h3', { style: 'margin-top:1rem' }, 'Gefundene Adressen'), sug.map(s => h('div', { class: 'row', style: 'margin-bottom:.4rem' }, h('div', { class: 'grow' }, h('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer', class: 'mono' }, s.url), s.reason ? h('div', { class: 'muted small' }, s.reason) : null), h('button', { class: 'btn small', type: 'button', onclick: () => { put('employers', { ...e, oldUrl: e.url, url: s.url, urlStatus: 'aktualisiert', note: (e.note ? e.note + ' · ' : '') + 'Adresse aus Test übernommen' }); toast('Adresse übernommen – wird beim nächsten Lauf geprüft', 'ok'); close(); } }, 'Übernehmen')))] : null);
@@ -31,12 +33,14 @@ export function openEmployer(id, after = () => {}) {
       portalType: select(PORTAL_TYPES, e.portalType || 'link'), searchUrl: input({ value: e.searchUrl || '', placeholder: 'https://portal.de/suche?was={q}&wo={ort}&umkreis={radius}' }),
       branche: input({ value: e.branche || '', placeholder: 'z. B. Automotive' }), note: textarea({ rows: 2, value: e.note || '' }) };
     const crawl = h('input', { type: 'checkbox', checked: e.crawl !== false });
+    const baSearch = h('input', { type: 'checkbox', checked: !!e.baSearch });
+    const baName = input({ value: e.baName || '', placeholder: e.name || 'Firmenname wie bei der Bundesagentur' });
     const portalRow = h('div', null, field('Portal-Typ', k.portalType), field('Eigene Such-Adresse (nur bei „Anderes Portal“)', k.searchUrl, 'Platzhalter: {q} Suchbegriff, {ort}, {radius}')); const syncKind = () => { portalRow.style.display = k.kind.value === 'portal' ? '' : 'none'; }; k.kind.addEventListener('change', syncKind); syncKind();
     const body = [];
     if (ex) {
       body.push(h('div', { class: 'row', style: 'margin-bottom:.5rem' }, h('a', { class: 'btn small', href: e.url, target: '_blank', rel: 'noopener noreferrer' }, 'Karriereseite öffnen'),
         e.kind !== 'portal' || e.portalType === 'ba' ? h('a', { class: 'btn small primary', href: '#/stellen?arbeitgeber=' + encodeURIComponent(e.id), onclick: close }, `Stellen anzeigen (${countOf(e.id)})`) : null,
-        h('button', { class: 'btn small', type: 'button', onclick: async ev => { ev.target.disabled = true; try { await triggerCrawl(e.id); toast('Test gestartet – in 1–3 Minuten unter Info → Abgleichen laden.', 'ok'); } catch (x) { toast(x.message, 'bad'); } ev.target.disabled = false; } }, canTrigger() ? 'Test starten' : 'Test starten (GitHub-Zugang fehlt)')));
+        h('button', { class: 'btn small', type: 'button', onclick: async ev => { ev.target.disabled = true; try { await triggerCrawl(e.id); toast('Test gestartet – das Ergebnis erscheint hier automatisch (ca. 2–5 Minuten).', 'ok'); watchForResult(ok => { toast(ok ? 'Neues Ergebnis liegt vor – Eintrag schließen und neu öffnen.' : 'Noch kein Ergebnis nach 15 Minuten – in GitHub unter Actions nachsehen.', ok ? 'ok' : 'bad'); window.dispatchEvent(new HashChangeEvent('hashchange')); }); } catch (x) { toast(x.message, 'bad'); } ev.target.disabled = false; } }, isWatching() ? 'Test läuft …' : canTrigger() ? 'Test starten' : 'Test starten (GitHub-Zugang fehlt)')));
       if (e.urlStatus || e.oldUrl) body.push(h('div', { class: 'banner info' }, e.urlStatus ? h('b', null, 'Adresse: ' + e.urlStatus + '. ') : null, e.oldUrl && e.oldUrl !== e.url ? ['Vorher: ', h('span', { class: 'mono' }, e.oldUrl)] : null));
       if (isStale(e, test)) {
         body.push(h('h3', null, 'Quellen-Test'), h('div', { class: 'banner' }, h('b', null, 'Adresse geändert – noch nicht neu geprüft. '), 'Das untenstehende Ergebnis gehört zur alten Adresse ', h('span', { class: 'mono' }, test.url), '. ', canTrigger() ? 'Mit „Test starten“ wird die neue Adresse jetzt geprüft.' : ['Die neue Adresse wird beim nächsten täglichen Abruf geprüft. Sofort geht es in GitHub unter Actions → Stellen abrufen → Run workflow mit der Eingabe ', h('span', { class: 'mono' }, e.id), '.']),
@@ -50,7 +54,7 @@ export function openEmployer(id, after = () => {}) {
       const url = normUrl(k.url.value);
       if (!k.name.value.trim() || !url) { toast('Name und Adresse sind Pflicht.', 'bad'); return; }
       const urlChanged = ex && url !== e.url;
-      put('employers', { ...e, name: k.name.value.trim(), url, kind: k.kind.value, portalType: k.kind.value === 'portal' ? k.portalType.value : undefined, searchUrl: k.searchUrl.value.trim() || undefined, branche: k.branche.value.trim(), note: k.note.value.trim(), crawl: crawl.checked,
+      put('employers', { ...e, name: k.name.value.trim(), url, kind: k.kind.value, portalType: k.kind.value === 'portal' ? k.portalType.value : undefined, searchUrl: k.searchUrl.value.trim() || undefined, branche: k.branche.value.trim(), note: k.note.value.trim(), crawl: crawl.checked, baSearch: baSearch.checked || undefined, baName: baName.value.trim() || undefined,
         ...(urlChanged ? { oldUrl: e.url, urlStatus: 'von dir geändert', confirmedAt: undefined } : {}) });
       toast('Gespeichert', 'ok'); close(); after();
     } },
@@ -58,6 +62,7 @@ export function openEmployer(id, after = () => {}) {
       portalRow,
       field('Branche (Markierung)', k.branche, 'Branchen aus Info → Einstellungen → „Ausblenden“ werden in der Stellensuche ausgeblendet.'),
       field('Notiz', k.note), h('label', { class: 'check' }, crawl, 'Stellen automatisch abrufen'),
+      h('div', null, h('label', { class: 'check' }, baSearch, 'Stellen über die Bundesagentur für Arbeit suchen (statt Karriereseite)'), h('p', { class: 'muted small' }, 'Für Firmen, deren Karriereseite den Abruf sperrt. Es erscheinen nur Stellen, die die Firma auch bei der Bundesagentur eingetragen hat.'), field('Firmenname bei der Bundesagentur (optional)', baName)),
       h('div', { class: 'btn-row' }, h('button', { class: 'btn primary', type: 'submit' }, 'Speichern'), ex ? h('button', { class: 'btn danger', type: 'button', onclick: async () => { if (await confirmDialog(`„${e.name}“ aus der Liste entfernen?`)) { del('employers', e.id); close(); after(); } } }, 'Entfernen') : null)));
     return h('div', null, body);
   }, { wide: true });

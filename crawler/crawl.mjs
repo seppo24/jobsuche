@@ -39,6 +39,13 @@ const geo = prev.geo || {};
 const browser = await chromium.launch();
 const mkContext = () => browser.newContext({ locale: 'de-DE', timezoneId: 'Europe/Berlin', viewport: { width: 1366, height: 900 }, userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36' });
 
+let altBrowser = null, altCtx = null;
+/** Zweiter Browser ohne HTTP/2 – manche Server (z. B. ABB) brechen HTTP/2-Verbindungen von Automaten ab. */
+async function altContext() {
+  if (!altCtx) { altBrowser = await chromium.launch({ args: ['--disable-http2'] }); altCtx = await altBrowser.newContext({ locale: 'de-DE', timezoneId: 'Europe/Berlin', viewport: { width: 1366, height: 900 }, userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36' }); }
+  return altCtx;
+}
+
 const todo = employers.filter(e => !ONLY || e.id === ONLY);
 const results = new Map();
 let idx = 0;
@@ -58,8 +65,12 @@ async function worker() {
         } else {
           results.set(emp.id, await withTimeout(crawlEmployer(ctx, emp, { discover: false }), SOURCE_TIMEOUT, emp.name));
         }
+      } else if (emp.baSearch) {
+        const name = emp.baName || emp.name;
+        const r = await withTimeout(crawlBA({ queries: [''], ort: profile.ort || 'Schwelm', radius: Math.max(profile.radiusKm || 50, 100), arbeitgeber: name, maxPerQuery: 200 }), SOURCE_TIMEOUT, emp.name);
+        results.set(emp.id, { items: r.items, test: { status: r.items.length ? 'ok' : 'leer', confidence: 'hoch', method: 'ba', count: r.items.length, httpStatus: r.httpStatus, checkedAt: NOW, durationMs: Date.now() - t0, message: r.items.length ? 'Stellen über die Bundesagentur für Arbeit gefunden (die Karriereseite selbst wird nicht abgerufen).' : `Bei der Bundesagentur für Arbeit gibt es aktuell keine Stellen für „${name}“ (oder der Firmenname lautet dort anders – dann unter „BA-Suchname“ anpassen).`, checks: [{ ok: r.httpStatus < 400, text: `Schnittstelle der Bundesagentur antwortet (HTTP ${r.httpStatus})` }, { ok: r.items.length > 0, text: `${r.items.length} Stellen für „${name}“ im Umkreis von ${Math.max(profile.radiusKm || 50, 100)} km um ${profile.ort || 'Schwelm'}` }], sample: r.items.slice(0, 6).map(i => ({ title: i.title, url: i.url, location: i.location })), suggestions: [], url: emp.url } });
       } else {
-        results.set(emp.id, await withTimeout(crawlEmployer(ctx, emp), SOURCE_TIMEOUT, emp.name));
+        results.set(emp.id, await withTimeout(crawlEmployer(ctx, emp, { altContext }), SOURCE_TIMEOUT, emp.name));
       }
       const r = results.get(emp.id);
       log(`${r.test.status.padEnd(9)} ${String(r.items.length).padStart(4)}  ${emp.name}`);
@@ -123,6 +134,7 @@ for (const j of jobs) {
 }
 await ctx.close();
 await browser.close();
+if (altBrowser) await altBrowser.close();
 
 jobs.sort((a, b) => (b.firstSeen || '').localeCompare(a.firstSeen || ''));
 const out = { generatedAt: NOW, version: 1, sources, geo, jobs };

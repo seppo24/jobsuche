@@ -1,9 +1,27 @@
 // Versionsverlauf – wird in der App unter „Info“ angezeigt.
 // Bei jeder Änderung: neuen Eintrag OBEN einfügen, VERSION erhöhen und in sw.js die CACHE-Version anpassen.
 
-export const VERSION = '1.0.3';
+export const VERSION = '1.0.5';
 
 export const CHANGELOG = [
+  {
+    version: '1.0.5',
+    date: '2026-10-29',
+    title: 'Test starten zeigt das Ergebnis',
+    items: [
+      'Nach „Test starten“ wartet die App auf das Ergebnis und zeigt es automatisch an (bisher musste man selbst abgleichen).',
+      'Geänderte Adressen werden vor dem Start in die Dropbox geschrieben, damit der Abruf die neue Adresse sicher kennt.',
+    ],
+  },
+  {
+    version: '1.0.4',
+    date: '2026-10-29',
+    title: 'Gesperrte Karriereseiten',
+    items: [
+      'Neu am Arbeitgeber: „Stellen über die Bundesagentur für Arbeit suchen“ – für Firmen, deren Karriereseite den automatischen Abruf sperrt (HTTP 403). Bei blockierten Quellen gibt es dafür einen Knopf im Quellen-Test.',
+      'Fehler „ERR_HTTP2_PROTOCOL_ERROR“ (z. B. ABB): Der Abruf versucht es jetzt automatisch ein zweites Mal ohne HTTP/2.',
+    ],
+  },
   {
     version: '1.0.3',
     date: '2026-10-29',

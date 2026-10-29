@@ -36,12 +36,18 @@ export async function crawlWorkday(startUrl, { maxJobs = 600 } = {}) {
 }
 
 /** Bundesagentur für Arbeit – offizielle Jobsuche-API (kostenlos, mit festem öffentlichen API-Key). */
-export async function crawlBA({ queries, ort, radius, maxPerQuery = 150 }) {
+const nrm = x => String(x || '').toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss').replace(/[^a-z0-9]+/g, ' ').trim();
+const LEGAL = new Set(['gmbh', 'ag', 'kg', 'se', 'co', 'mbh', 'ohg', 'inc', 'ltd', 'und', 'deutschland', 'germany', 'group', 'gruppe']);
+/** Namens-Schlüssel für den Abgleich: die ersten zwei aussagekräftigen Wörter. */
+export const nameTokens = name => nrm(name).split(' ').filter(w => w && !LEGAL.has(w)).slice(0, 2);
+
+export async function crawlBA({ queries, ort, radius, maxPerQuery = 150, arbeitgeber = '' }) {
+  const tokens = arbeitgeber ? nameTokens(arbeitgeber) : [];
   const items = new Map();
   let httpStatus = 200, total = 0;
   for (const q of queries.length ? queries : ['']) {
     for (let page = 1; page <= Math.ceil(maxPerQuery / 50); page++) {
-      const url = `https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v4/jobs?was=${encodeURIComponent(q)}&wo=${encodeURIComponent(ort)}&umkreis=${radius}&angebotsart=1&size=50&page=${page}`;
+      const url = `https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v4/jobs?was=${encodeURIComponent(q)}&wo=${encodeURIComponent(ort)}&umkreis=${radius}&angebotsart=1&size=50&page=${page}${arbeitgeber ? '&arbeitgeber=' + encodeURIComponent(arbeitgeber) : ''}`;
       const r = await jfetch(url, { headers: { 'X-API-Key': 'jobboerse-jobsuche' } });
       httpStatus = r.status;
       if (!r.ok) break;
@@ -51,6 +57,7 @@ export async function crawlBA({ queries, ort, radius, maxPerQuery = 150 }) {
         const loc = s.arbeitsort || {};
         const id = s.refnr;
         if (items.has(id)) continue;
+        if (tokens.length) { const a = ' ' + nrm(s.arbeitgeber) + ' '; if (!tokens.every(t => a.includes(' ' + t + ' '))) continue; } // BA-Suche ist unscharf: nur echte Treffer des Arbeitgebers
         items.set(id, {
           title: s.titel || s.beruf, employer: s.arbeitgeber || '', url: `https://www.arbeitsagentur.de/jobsuche/jobdetail/${encodeURIComponent(id)}`,
           location: [loc.plz, loc.ort].filter(Boolean).join(' '), distanceKm: loc.entfernung != null ? Math.round(parseFloat(String(loc.entfernung).replace(',', '.'))) : undefined,
