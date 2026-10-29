@@ -8,7 +8,7 @@ import { distanceFor } from './lib/geo.mjs';
 
 const ONLY = (process.env.ONLY || '').trim();
 const CONCURRENCY = +(process.env.CONCURRENCY || 4);
-const SOURCE_TIMEOUT = +(process.env.SOURCE_TIMEOUT || 150000);
+const SOURCE_TIMEOUT = +(process.env.SOURCE_TIMEOUT || 210000);
 const NOW = new Date().toISOString();
 const PORTAL_LINK_ONLY = new Set(['stepstone', 'linkedin', 'indeed', 'xing']);
 
@@ -17,7 +17,7 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
 async function withTimeout(p, ms, label) {
   let t;
-  try { return await Promise.race([p, new Promise((_, rej) => { t = setTimeout(() => rej(new Error('Zeitüberschreitung bei ' + label)), ms); })]); } finally { clearTimeout(t); }
+  try { return await Promise.race([p, new Promise((_, rej) => { t = setTimeout(() => rej(new Error('Zeitüberschreitung bei ' + label + ' – die Seite hat zu lange gebraucht (sehr lange Liste oder langsamer Server)')), ms); })]); } finally { clearTimeout(t); }
 }
 
 const store = makeStore();

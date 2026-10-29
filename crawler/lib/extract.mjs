@@ -14,7 +14,7 @@ async function autoScroll(page) {
   } catch { /* Seite hat sich geändert */ }
 }
 
-export async function crawlPage(context, startUrl, { maxPages = 12, maxLoadMore = 90, budgetMs = 110000 } = {}) {
+export async function crawlPage(context, startUrl, { maxPages = 12, maxLoadMore = 90, budgetMs = 90000, maxItems = 800 } = {}) {
   const deadline = Date.now() + budgetMs;
   const page = await context.newPage();
   const all = new Map();
@@ -35,7 +35,7 @@ export async function crawlPage(context, startUrl, { maxPages = 12, maxLoadMore 
       const target = res.hint && res.hint > firstCount ? Math.min(res.hint, 2000) : 0;
       let prevCount = firstCount, stall = 0;
       for (let k = 0; k < maxLoadMore && Date.now() < deadline; k++) {
-        if (target && res.items.length >= target) break;
+        if ((target && res.items.length >= target) || res.items.length >= maxItems) break;
         let acted = false;
         if (res.hasMore) {
           const btn = page.locator('[data-jobsuche-more="1"]').first();

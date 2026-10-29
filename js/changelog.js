@@ -1,9 +1,17 @@
 // Versionsverlauf – wird in der App unter „Info“ angezeigt.
 // Bei jeder Änderung: neuen Eintrag OBEN einfügen, VERSION erhöhen und in sw.js die CACHE-Version anpassen.
 
-export const VERSION = '1.0.6';
+export const VERSION = '1.0.7';
 
 export const CHANGELOG = [
+  {
+    version: '1.0.7',
+    date: '2026-10-29',
+    title: 'Sehr lange Stellenlisten',
+    items: [
+      'Seiten mit sehr vielen Stellen (z. B. Personaldienstleister) brechen nicht mehr mit „Zeitüberschreitung“ ab: Der Abruf liest höchstens 800 Stellen pro Quelle und hört nach ca. 90 Sekunden Nachladen auf; das Gesamtzeitlimit pro Quelle beträgt 3,5 Minuten.',
+    ],
+  },
   {
     version: '1.0.6',
     date: '2026-10-29',
