@@ -5,6 +5,8 @@ import { PORTAL_TYPES, canTrigger, triggerCrawl, searchUrl } from '../portals.js
 
 const testOf = id => S.jobs.sources?.[id]?.test || S.jobs.sources?.[id] || null;
 const countOf = id => (S.jobs.jobs || []).filter(j => j.employerId === id).length;
+const sameUrl = (a, b) => String(a || '').replace(/\/+$/, '').toLowerCase() === String(b || '').replace(/\/+$/, '').toLowerCase();
+export const isStale = (e, t) => !!(t && t.url && !sameUrl(t.url, e.url));
 const f = lsGet('jobsuche.empview', { q: '', kind: 'alle' });
 
 function testPanel(e, test, close) {
@@ -36,8 +38,11 @@ export function openEmployer(id, after = () => {}) {
         e.kind !== 'portal' || e.portalType === 'ba' ? h('a', { class: 'btn small primary', href: '#/stellen?arbeitgeber=' + encodeURIComponent(e.id), onclick: close }, `Stellen anzeigen (${countOf(e.id)})`) : null,
         h('button', { class: 'btn small', type: 'button', onclick: async ev => { ev.target.disabled = true; try { await triggerCrawl(e.id); toast('Test gestartet – in 1–3 Minuten unter Info → Abgleichen laden.', 'ok'); } catch (x) { toast(x.message, 'bad'); } ev.target.disabled = false; } }, canTrigger() ? 'Test starten' : 'Test starten (GitHub-Zugang fehlt)')));
       if (e.urlStatus || e.oldUrl) body.push(h('div', { class: 'banner info' }, e.urlStatus ? h('b', null, 'Adresse: ' + e.urlStatus + '. ') : null, e.oldUrl && e.oldUrl !== e.url ? ['Vorher: ', h('span', { class: 'mono' }, e.oldUrl)] : null));
-      body.push(h('h3', null, 'Quellen-Test'), testPanel(e, test, () => { close(); after(); }));
-      if (e.kind !== 'portal' && test && test.status !== 'nur-link') body.push(h('div', { class: 'btn-row' }, h('button', { class: 'btn small', type: 'button', onclick: () => { put('employers', { ...e, confirmedAt: new Date().toISOString(), confirmedCount: test.count ?? null }); toast('Als korrekt bestätigt', 'ok'); close(); after(); } }, e.confirmedAt ? 'Erneut als korrekt bestätigen' : 'Als korrekt bestätigen')), e.confirmedAt ? h('p', { class: 'muted small' }, 'Von dir bestätigt ' + fmtRel(e.confirmedAt)) : null);
+      if (isStale(e, test)) {
+        body.push(h('h3', null, 'Quellen-Test'), h('div', { class: 'banner' }, h('b', null, 'Adresse geändert – noch nicht neu geprüft. '), 'Das untenstehende Ergebnis gehört zur alten Adresse ', h('span', { class: 'mono' }, test.url), '. ', canTrigger() ? 'Mit „Test starten“ wird die neue Adresse jetzt geprüft.' : ['Die neue Adresse wird beim nächsten täglichen Abruf geprüft. Sofort geht es in GitHub unter Actions → Stellen abrufen → Run workflow mit der Eingabe ', h('span', { class: 'mono' }, e.id), '.']),
+          h('details', { class: 'log' }, h('summary', null, 'Ergebnis für die alte Adresse'), h('div', { style: 'padding:0 1rem 1rem' }, testPanel(e, { ...test, suggestions: [] }, () => { close(); after(); }))));
+      } else body.push(h('h3', null, 'Quellen-Test'), testPanel(e, test, () => { close(); after(); }));
+      if (e.kind !== 'portal' && test && test.status !== 'nur-link' && !isStale(e, test)) body.push(h('div', { class: 'btn-row' }, h('button', { class: 'btn small', type: 'button', onclick: () => { put('employers', { ...e, confirmedAt: new Date().toISOString(), confirmedCount: test.count ?? null }); toast('Als korrekt bestätigt', 'ok'); close(); after(); } }, e.confirmedAt ? 'Erneut als korrekt bestätigen' : 'Als korrekt bestätigen')), e.confirmedAt ? h('p', { class: 'muted small' }, 'Von dir bestätigt ' + fmtRel(e.confirmedAt)) : null);
       body.push(h('hr', { style: 'border:0;border-top:1px solid var(--line);margin:1.25rem 0' }), h('h3', null, 'Bearbeiten'));
     }
     body.push(h('form', { onsubmit: ev => {
@@ -64,7 +69,7 @@ export function render(el) {
   const qIn = input({ type: 'search', value: f.q, placeholder: 'Arbeitgeber suchen', 'aria-label': 'Arbeitgeber suchen' });
   const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Art' }, [['alle', 'Alle'], ['arbeitgeber', 'Arbeitgeber'], ['dienstleister', 'Dienstleister'], ['portal', 'Portale'], ['pruefen', 'Prüfen']].map(([k, l]) =>
     h('button', { type: 'button', 'aria-pressed': String(f.kind === k), onclick: ev => { f.kind = k; lsSet('jobsuche.empview', f); [...seg.children].forEach(b => b.setAttribute('aria-pressed', String(b === ev.currentTarget))); draw(); } }, l)));
-  const needsCheck = e => { const t = testOf(e.id); return e.crawl !== false && e.kind !== 'portal' && (e.urlStatus === 'unsicher' || (t && ['fehler', 'blockiert', 'unsicher'].includes(t.status))); };
+  const needsCheck = e => { const t = testOf(e.id); return e.crawl !== false && e.kind !== 'portal' && (isStale(e, t) || e.urlStatus === 'unsicher' || (t && ['fehler', 'blockiert', 'unsicher'].includes(t.status))); };
   function draw() {
     const q = f.q.toLowerCase();
     const rows = all.filter(e => (f.kind === 'alle' || (f.kind === 'pruefen' ? needsCheck(e) : e.kind === f.kind)) && (!q || (e.name + ' ' + hostOf(e.url)).toLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name, 'de'));
@@ -73,7 +78,7 @@ export function render(el) {
       return h('button', { class: 'emp', type: 'button', onclick: () => openEmployer(e.id, () => render(el)) },
         h('div', { class: 'grow' }, h('div', { class: 'n' }, e.name), h('div', { class: 's' }, hostOf(e.url) + (e.branche ? ' · ' + e.branche : ''))),
         e.urlStatus === 'unsicher' && !t ? h('span', { class: 'pill warn' }, h('i'), 'Adresse prüfen') : null,
-        t ? statusPill(t.status, t.message) : (e.kind === 'portal' ? null : h('span', { class: 'pill mute' }, h('i'), 'nicht geprüft')),
+        t && isStale(e, t) ? h('span', { class: 'pill warn' }, h('i'), 'Adresse geändert') : t ? statusPill(t.status, t.message) : (e.kind === 'portal' ? null : h('span', { class: 'pill mute' }, h('i'), 'nicht geprüft')),
         countOf(e.id) ? h('span', { class: 'chip' }, countOf(e.id) + ' Stellen') : null);
     }) : emptyState('Keine Einträge', 'Mit „Hinzufügen“ trägst du einen Arbeitgeber oder ein Jobportal ein.'));
   }

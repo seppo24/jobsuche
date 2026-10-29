@@ -1,5 +1,5 @@
 // Offline-Hülle der App. Bei jeder Version die CACHE-Nummer hochzählen (zusammen mit VERSION in js/changelog.js).
-const CACHE = 'jobsuche-1.0.2';
+const CACHE = 'jobsuche-1.0.3';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'css/app.css', 'lib/jszip.min.js', 'icons/icon.svg', 'icons/icon-192.png',
   'js/app.js', 'js/util.js', 'js/ui.js', 'js/store.js', 'js/dropbox.js', 'js/search.js', 'js/docs.js', 'js/files.js', 'js/importers.js', 'js/xlsxread.js', 'js/portals.js', 'js/changelog.js',
   'js/views/jobs.js', 'js/views/employers.js', 'js/views/applications.js', 'js/views/documents.js', 'js/views/info.js', 'js/views/tailor.js', 'data/seed-employers.json'];

@@ -1,9 +1,18 @@
 // Versionsverlauf – wird in der App unter „Info“ angezeigt.
 // Bei jeder Änderung: neuen Eintrag OBEN einfügen, VERSION erhöhen und in sw.js die CACHE-Version anpassen.
 
-export const VERSION = '1.0.2';
+export const VERSION = '1.0.3';
 
 export const CHANGELOG = [
+  {
+    version: '1.0.3',
+    date: '2026-10-29',
+    title: 'Geänderte Adresse',
+    items: [
+      'Wird die Adresse einer Karriereseite geändert, zeigt die App das alte Testergebnis nicht mehr als aktuell: Es erscheint „Adresse geändert – noch nicht neu geprüft“ samt Hinweis, wie die neue Adresse sofort geprüft wird.',
+      'Die Alt-Vorschläge („gefundene Adressen“) der geänderten Quelle werden ausgeblendet; im Filter „Prüfen“ taucht die Quelle bis zur neuen Prüfung auf.',
+    ],
+  },
   {
     version: '1.0.2',
     date: '2026-10-29',
