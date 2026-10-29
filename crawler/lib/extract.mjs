@@ -14,7 +14,8 @@ async function autoScroll(page) {
   } catch { /* Seite hat sich geändert */ }
 }
 
-export async function crawlPage(context, startUrl, { maxPages = 12, maxLoadMore = 12 } = {}) {
+export async function crawlPage(context, startUrl, { maxPages = 12, maxLoadMore = 90, budgetMs = 110000 } = {}) {
+  const deadline = Date.now() + budgetMs;
   const page = await context.newPage();
   const all = new Map();
   let httpStatus = 0, finalUrl = startUrl, method = '', hint = null, text = '', pages = 0, error = '';
@@ -29,25 +30,42 @@ export async function crawlPage(context, startUrl, { maxPages = 12, maxLoadMore 
       pages++;
       await autoScroll(page);
       let res = await page.evaluate(pageScript);
-      // „Mehr laden“-Schaltfläche
-      for (let k = 0; k < maxLoadMore && res.hasMore; k++) {
-        const btn = page.getByRole('button', { name: /mehr (laden|anzeigen|stellen|jobs)|load more|show more|weitere (stellen|jobs|ergebnisse)/i }).first();
-        if (!(await btn.isVisible().catch(() => false))) break;
-        const before = res.items.length;
-        await btn.click({ timeout: 3000 }).catch(() => {});
-        await settle(page, 4000);
+      // Weitere Stellen nachladen: „Mehr laden“-Schaltflächen anklicken bzw. bei endlosem Scrollen nach unten scrollen
+      const firstCount = res.items.length;
+      const target = res.hint && res.hint > firstCount ? Math.min(res.hint, 2000) : 0;
+      let prevCount = firstCount, stall = 0;
+      for (let k = 0; k < maxLoadMore && Date.now() < deadline; k++) {
+        if (target && res.items.length >= target) break;
+        let acted = false;
+        if (res.hasMore) {
+          const btn = page.locator('[data-jobsuche-more="1"]').first();
+          if (await btn.isVisible().catch(() => false)) {
+            await btn.scrollIntoViewIfNeeded({ timeout: 2000 }).catch(() => {});
+            acted = await btn.click({ timeout: 3000 }).then(() => true).catch(() => false);
+          }
+        }
+        if (!acted) await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => {});
+        await page.waitForTimeout(acted ? 700 : 900);
+        await settle(page, 3500);
         res = await page.evaluate(pageScript);
-        if (res.items.length <= before) break;
+        if (res.items.length > prevCount) { prevCount = res.items.length; stall = 0; }
+        else if (++stall >= (acted ? 2 : 2)) break;
       }
       if (p === 0) { text = res.text; hint = res.hint; method = res.method; }
       if (!method && res.method) method = res.method;
       let added = 0;
       for (const it of res.items) if (!all.has(it.url)) { all.set(it.url, it); added++; }
-      if (!res.next || visited.has(res.next) || !added) break;
-      visited.add(res.next);
-      const r2 = await page.goto(res.next, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => null);
-      if (!r2) break;
-      await settle(page, 4000);
+      if (!added || Date.now() > deadline) break;
+      if (res.next && !visited.has(res.next)) {
+        visited.add(res.next);
+        const r2 = await page.goto(res.next, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => null);
+        if (!r2) break;
+        await settle(page, 4000);
+      } else if (res.hasNextBtn) { // Seitenwechsel per Schaltfläche (ohne eigene Adresse)
+        const nb = page.locator('[data-jobsuche-next="1"]').first();
+        if (!(await nb.isVisible().catch(() => false)) || !(await nb.click({ timeout: 3000 }).then(() => true).catch(() => false))) break;
+        await page.waitForTimeout(700); await settle(page, 4000);
+      } else break;
     }
   } catch (e) {
     error = /net::ERR|Timeout|ERR_/.test(e.message) ? e.message.split('\n')[0] : e.message;

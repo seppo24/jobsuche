@@ -127,8 +127,20 @@ export function pageScript() {
     return (a.rel && /next/i.test(a.rel)) || /^(weiter|next|nächste( seite)?|›|»|>|vor)\s*$/i.test(clean(a.textContent)) || /(next page|nächste seite)/i.test(t);
   });
   if (nextA && !/#$/.test(nextA.getAttribute('href') || '#')) out.next = abs(nextA.getAttribute('href'));
-  const more = [...document.querySelectorAll('button, a[role="button"], [class*="load-more" i], [class*="loadmore" i]')].find(b => /(mehr (laden|anzeigen|stellen|jobs)|load more|show more|weitere (stellen|jobs|ergebnisse))/i.test(clean(b.textContent)) && vis(b));
+  // „Mehr laden“ (Schaltfläche, Link ohne neue Seite, Eingabefeld) – wird für Playwright markiert
+  document.querySelectorAll('[data-jobsuche-more],[data-jobsuche-next]').forEach(n => { n.removeAttribute('data-jobsuche-more'); n.removeAttribute('data-jobsuche-next'); });
+  const MORE = /(mehr\s+(jobs|stellen|ergebnisse|angebote|anzeigen|laden)|weitere\s+(jobs|stellen|ergebnisse|angebote|anzeigen|laden)|(jobs|stellen|ergebnisse|angebote)\s+(laden|nachladen|anzeigen)|(load|show|view|see|display)\s+(more|all)|more\s+(jobs|results|positions|vacancies|openings)|alle\s+(stellen|jobs)\s+(laden|anzeigen)|^\s*(mehr|more|weitere|weitere laden|laden)\s*[+▾▼↓⌄]?\s*$)/i;
+  const NEXTB = /^\s*(weiter|next|nächste( seite)?|naechste( seite)?|›|»|>|→|vor)\s*$/i;
+  const samePage = (a) => { const h = a.getAttribute('href'); if (!h || h === '#' || /^javascript:/i.test(h)) return true; try { const u = new URL(h, location.href); return u.origin === location.origin && u.pathname === location.pathname && !u.search; } catch { return false; } };
+  const clickables = [...document.querySelectorAll('button, a, [role="button"], input[type="button"], input[type="submit"], [class*="load-more" i], [class*="loadmore" i], [class*="show-more" i], [class*="more-jobs" i], [class*="pagination" i] [class*="next" i]')]
+    .filter(b => vis(b) && !b.disabled && b.getAttribute('aria-disabled') !== 'true' && !b.closest('header, footer, [class*="cookie" i], [id*="cookie" i], [class*="consent" i]'));
+  const label = (b) => clean(b.value || b.innerText || b.textContent) + ' ' + (b.getAttribute('aria-label') || '');
+  const more = clickables.find(b => { const t = clean(b.value || b.innerText || b.textContent); return t.length <= 50 && MORE.test(t + ' ' + (b.getAttribute('aria-label') || '')) && (b.tagName !== 'A' || samePage(b)); });
   out.hasMore = !!more;
+  if (more) more.setAttribute('data-jobsuche-more', '1');
+  const nextB = !more && clickables.find(b => (b.tagName !== 'A' || samePage(b)) && (NEXTB.test(clean(b.innerText || b.textContent)) || /(^|\b)(next|weiter|nächste|naechste)\b/i.test(b.getAttribute('aria-label') || '')) && clean(b.innerText || b.textContent).length <= 20);
+  out.hasNextBtn = !!nextB;
+  if (nextB) nextB.setAttribute('data-jobsuche-next', '1');
   return out;
 }
 

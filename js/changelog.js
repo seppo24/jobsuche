@@ -1,9 +1,18 @@
 // Versionsverlauf – wird in der App unter „Info“ angezeigt.
 // Bei jeder Änderung: neuen Eintrag OBEN einfügen, VERSION erhöhen und in sw.js die CACHE-Version anpassen.
 
-export const VERSION = '1.0.5';
+export const VERSION = '1.0.6';
 
 export const CHANGELOG = [
+  {
+    version: '1.0.6',
+    date: '2026-10-29',
+    title: 'Alle Stellen laden',
+    items: [
+      'Der Abruf lädt lange Stellenlisten vollständig: Er klickt „Mehr laden“ / „Weitere Jobs anzeigen“ (Schaltfläche oder Link) so lange, bis die von der Seite genannte Zahl erreicht ist, scrollt bei endlosen Listen weiter und wechselt per „Weiter“-Schaltfläche die Seite.',
+      'Zeitlimit pro Karriereseite: ca. 2 Minuten.',
+    ],
+  },
   {
     version: '1.0.5',
     date: '2026-10-29',

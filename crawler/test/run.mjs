@@ -21,7 +21,7 @@ const server = http.createServer((req, res) => {
     }); return;
   }
   if (u.pathname.startsWith('/job/') || u.pathname.startsWith('/stelle/') || u.pathname.startsWith('/p/')) { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end('<h1>Detail</h1>'); return; }
-  const map = { '/': 'home.html', '/sf': 'sf1.html', '/sf2.html': 'sf2.html', '/cards': 'cards.html', '/ld': 'ld.html', '/old': 'old1.html', '/old2.html': 'old2.html', '/empty': 'empty.html', '/js': 'js.html', '/marketing': 'marketing.html', '/karriere': 'marketing.html' };
+  const map = { '/': 'home.html', '/sf': 'sf1.html', '/sf2.html': 'sf2.html', '/cards': 'cards.html', '/ld': 'ld.html', '/old': 'old1.html', '/old2.html': 'old2.html', '/empty': 'empty.html', '/js': 'js.html', '/more2': 'more2.html', '/scroll': 'scroll.html', '/nextbtn': 'nextbtn.html', '/marketing': 'marketing.html', '/karriere': 'marketing.html' };
   const f = map[u.pathname];
   if (u.pathname === '/gone') { res.writeHead(404, { 'Content-Type': 'text/html' }); res.end(fs.readFileSync(path.join(dir, '404.html'))); return; }
   if (u.pathname === '/moved') { res.writeHead(302, { Location: '/cards' }); res.end(); return; }
@@ -43,6 +43,9 @@ const cases = [
   ['Alte Tabelle mit „›“-Seitenwechsel', '/old', r => r.items.length === 10 && r.test.status !== 'fehler'],
   ['Leere Karriereseite', '/empty', r => r.items.length === 0 && r.test.status === 'leer'],
   ['Per JavaScript geladen + „Mehr laden“', '/js', r => r.items.length === 10 && r.test.status !== 'fehler'],
+  ['„Weitere Jobs anzeigen“ als Link (90 Stellen)', '/more2', r => r.items.length === 90 && r.test.status === 'ok'],
+  ['Endloses Scrollen (60 Stellen)', '/scroll', r => r.items.length === 60 && r.test.status === 'ok'],
+  ['Seitenwechsel per Schaltfläche (40 Stellen)', '/nextbtn', r => r.items.length === 40 && r.test.status === 'ok'],
   ['Seite ohne Stellenliste', '/marketing', r => (r.items.length === 0 && r.test.status === 'unsicher') || r.test.confidence === 'niedrig'],
   ['Alte Adresse 404 → Vorschlag', '/gone', r => r.test.status === 'fehler' && r.test.suggestions.some(s => s.url.endsWith('/karriere/stellenangebote') || s.url.includes('karriere'))],
   ['Weiterleitung wird gemeldet', '/moved', r => r.test.suggestions.some(s => s.url.endsWith('/cards'))],
