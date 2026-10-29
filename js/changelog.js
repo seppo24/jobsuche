@@ -1,9 +1,26 @@
 // Versionsverlauf – wird in der App unter „Info“ angezeigt.
 // Bei jeder Änderung: neuen Eintrag OBEN einfügen, VERSION erhöhen und in sw.js die CACHE-Version anpassen.
 
-export const VERSION = '1.0.7';
+export const VERSION = '1.0.9';
 
 export const CHANGELOG = [
+  {
+    version: '1.0.9',
+    date: '2026-10-29',
+    title: 'Karriereseiten mit Suchmaske',
+    items: [
+      'Zeigt eine Karriereseite zunächst nur eine Suchmaske (z. B. Bilfinger), schickt der Abruf sie leer ab und liest die dann angezeigten Stellen.',
+      'Bei SuccessFactors-Suchlisten werden Folgeseiten auch dann geladen, wenn kein „Weiter“-Link erkennbar ist.',
+    ],
+  },
+  {
+    version: '1.0.8',
+    date: '2026-10-29',
+    title: 'Arbeitszeugnisse',
+    items: [
+      'Dokumente: eigene Kategorie „Arbeitszeugnisse“ mit Schnellknopf „Arbeitszeugnis hochladen“ und optionaler Bezeichnung (Firma, Zeitraum). Die bisherige Kategorie „Zeugnisse“ heißt jetzt „Schul- und Studienzeugnisse“.',
+    ],
+  },
   {
     version: '1.0.7',
     date: '2026-10-29',

@@ -172,3 +172,20 @@ export function discoverScript() {
   const seen = new Set();
   return out.filter(x => !seen.has(x.url) && seen.add(x.url)).sort((a, b) => b.score - a.score).slice(0, 5);
 }
+
+/** Sucht eine Freitext-Suchmaske (Stichwortfeld + Suchknopf) und markiert den Knopf – leer abgeschickt zeigen viele Karriereseiten alle Stellen. */
+export function searchFormScript() {
+  const vis = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+  document.querySelectorAll('[data-jobsuche-submit]').forEach(n => n.removeAttribute('data-jobsuche-submit'));
+  const key = /(^|[^a-z])(q|search|suche|keyword|keywords|query|jobsearch|stichwort|freitext)([^a-z]|$)|such|search|stichwort|keyword/i;
+  const inputs = [...document.querySelectorAll('input[type="search"], input[type="text"], input:not([type])')]
+    .filter(i => vis(i) && !i.closest('[class*="cookie" i], [id*="cookie" i], [class*="newsletter" i]'))
+    .filter(i => key.test([i.name, i.id, i.getAttribute('placeholder'), i.getAttribute('aria-label'), i.type].join(' ')));
+  for (const i of inputs) {
+    const form = i.closest('form');
+    let btn = form && [...form.querySelectorAll('button[type="submit"], input[type="submit"], button:not([type]), [role="button"]')].find(vis);
+    if (!btn) btn = [...(i.parentElement?.parentElement || document).querySelectorAll('button, input[type="submit"], [role="button"]')].find(b => vis(b) && /(such|search|suche|go|finden|find|lupe)/i.test((b.innerText || b.value || '') + ' ' + (b.getAttribute('aria-label') || '') + ' ' + (b.title || '') + ' ' + b.className));
+    if (btn) { btn.setAttribute('data-jobsuche-submit', '1'); return true; }
+  }
+  return false;
+}

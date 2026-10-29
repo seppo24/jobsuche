@@ -3,7 +3,7 @@ import { uid, safeName, nowIso } from './util.js';
 import * as dbx from './dropbox.js';
 import { put, del, get } from './store.js';
 
-export const CATEGORIES = [['lebenslauf', 'Lebenslauf'], ['anschreiben', 'Anschreiben'], ['zeugnisse', 'Zeugnisse'], ['zertifikate', 'Zertifikate'], ['bewerbungen', 'Fertige Bewerbungen'], ['sonstiges', 'Sonstiges']];
+export const CATEGORIES = [['lebenslauf', 'Lebenslauf'], ['anschreiben', 'Anschreiben'], ['arbeitszeugnisse', 'Arbeitszeugnisse'], ['zeugnisse', 'Schul- und Studienzeugnisse'], ['zertifikate', 'Zertifikate'], ['bewerbungen', 'Fertige Bewerbungen'], ['sonstiges', 'Sonstiges']];
 export const catLabel = k => (CATEGORIES.find(c => c[0] === k) || [0, k])[1];
 
 export async function uploadDocument(file, category, { name, note } = {}) {

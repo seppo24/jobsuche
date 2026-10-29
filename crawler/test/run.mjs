@@ -21,6 +21,12 @@ const server = http.createServer((req, res) => {
     }); return;
   }
   if (u.pathname.startsWith('/job/') || u.pathname.startsWith('/stelle/') || u.pathname.startsWith('/p/')) { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end('<h1>Detail</h1>'); return; }
+  if (u.pathname === '/sfs') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end('<!doctype html><html><head><meta charset="utf-8"><title>Karriere</title></head><body><header><nav><a href="/">Start</a></nav></header><h1>Karriere bei uns</h1><p>Finden Sie Ihren Job.</p><form action="/sfs/search" method="get"><input type="text" name="q" placeholder="Stichwort"><input type="text" name="locationsearch" placeholder="Ort"><button type="submit" class="btn">Suchen</button></form></body></html>'); return; }
+  if (u.pathname === '/sfs/search') { // SuccessFactors-Suche: 25 Stellen, 10 je Seite, Folgeseiten nur über startrow (kein „Weiter“-Link)
+    const start = +(u.searchParams.get('startrow') || 0); const T = ['Projektleiter', 'Teamleiter', 'Konstrukteur', 'Servicetechniker', 'Projektmanager'];
+    const rows = Array.from({ length: Math.max(0, Math.min(10, 25 - start)) }, (_, i) => `<tr class="data-row"><td><span class="jobTitle"><a href="/job/${start + i}/" class="jobTitle-link">${T[(start + i) % 5]} Nr. ${start + i} (m/w/d)</a></span></td><td><span class="jobLocation">Wuppertal, DE</span></td></tr>`).join('');
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(`<!doctype html><html><head><meta charset="utf-8"><title>Suche</title></head><body><h1>Stellenangebote</h1><span class="paginationLabel">Ergebnisse ${start + 1} – ${Math.min(start + 10, 25)} von 25</span><table><tbody>${rows}</tbody></table></body></html>`); return;
+  }
   const map = { '/': 'home.html', '/sf': 'sf1.html', '/sf2.html': 'sf2.html', '/cards': 'cards.html', '/ld': 'ld.html', '/old': 'old1.html', '/old2.html': 'old2.html', '/empty': 'empty.html', '/js': 'js.html', '/more2': 'more2.html', '/scroll': 'scroll.html', '/nextbtn': 'nextbtn.html', '/marketing': 'marketing.html', '/karriere': 'marketing.html' };
   const f = map[u.pathname];
   if (u.pathname === '/gone') { res.writeHead(404, { 'Content-Type': 'text/html' }); res.end(fs.readFileSync(path.join(dir, '404.html'))); return; }
@@ -46,6 +52,7 @@ const cases = [
   ['„Weitere Jobs anzeigen“ als Link (90 Stellen)', '/more2', r => r.items.length === 90 && r.test.status === 'ok'],
   ['Endloses Scrollen (60 Stellen)', '/scroll', r => r.items.length === 60 && r.test.status === 'ok'],
   ['Seitenwechsel per Schaltfläche (40 Stellen)', '/nextbtn', r => r.items.length === 40 && r.test.status === 'ok'],
+  ['Suchmaske leer abschicken + startrow-Seiten (25 Stellen)', '/sfs', r => r.items.length === 25 && r.test.status === 'ok'],
   ['Seite ohne Stellenliste', '/marketing', r => (r.items.length === 0 && r.test.status === 'unsicher') || r.test.confidence === 'niedrig'],
   ['Alte Adresse 404 → Vorschlag', '/gone', r => r.test.status === 'fehler' && r.test.suggestions.some(s => s.url.endsWith('/karriere/stellenangebote') || s.url.includes('karriere'))],
   ['Weiterleitung wird gemeldet', '/moved', r => r.test.suggestions.some(s => s.url.endsWith('/cards'))],
