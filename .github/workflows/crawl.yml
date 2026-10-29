@@ -1,0 +1,31 @@
+name: Stellen abrufen
+on:
+  schedule:
+    - cron: '17 4 * * *'   # täglich ca. 06:17 Uhr deutscher Zeit
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Nur diese Quelle (Arbeitgeber-ID), leer = alle'
+        required: false
+        default: ''
+concurrency: { group: crawl, cancel-in-progress: false }
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Abhängigkeiten
+        working-directory: crawler
+        run: npm install --no-audit --no-fund
+      - name: Browser installieren
+        working-directory: crawler
+        run: npx playwright install --with-deps chromium
+      - name: Stellen abrufen
+        run: node crawler/crawl.mjs
+        env:
+          DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
+          DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
+          ONLY: ${{ github.event.inputs.only }}
