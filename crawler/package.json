@@ -1,0 +1,9 @@
+{
+  "name": "jobsuche-crawler",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Täglicher Stellenabruf für die Jobsuche-App (läuft in GitHub Actions)",
+  "scripts": { "crawl": "node crawl.mjs", "test": "node test/run.mjs" },
+  "dependencies": { "playwright": "^1.48.0" }
+}
