@@ -14,21 +14,22 @@ export function pageScript() {
   const NOTLOC = /(vollzeit|teilzeit|full[- ]?time|part[- ]?time|unbefristet|befristet|festanstellung|hybrid|remote|homeoffice|home office|mobil|ausbildung|praktikum|werkstudent|m\/w|w\/m|\d{1,2}\.\d{1,2}\.\d{2,4}|vor \d+ (tag|woche|stunde)|bewerben|neu\b|new\b|referenz|job-?id|req)/i;
   const placeLike = (t) => t.length >= 3 && t.length <= 70 && /^[A-ZÄÖÜ(]/.test(t) && !NOTLOC.test(t) && !JOBWORDS.test(t) && (t.match(/\d/g) || []).length <= 5;
   const rowLocation = (row, title) => {
-    if (!row) return '';
+    const R = (t, strong) => ({ t, strong });
+    if (!row) return R('', false);
     const els = [row, ...row.querySelectorAll('*')].slice(0, 80);
     for (const e of els) {
       const key = [e.className && e.className.baseVal === undefined ? e.className : '', e.getAttribute && e.getAttribute('itemprop'), e.getAttribute && e.getAttribute('data-location'), e.getAttribute && e.getAttribute('aria-label')].join(' ');
       if (e !== row && (/(addressLocality|jobLocation|location)/i.test(e.getAttribute('itemprop') || '') || LOCCLS.test(key) || e.getAttribute('data-location'))) {
         const t = clean(e.getAttribute('data-location') || e.innerText || e.textContent).replace(/^(standort|ort|location|einsatzort|arbeitsort)\s*[:·-]?\s*/i, '');
-        if (t && t.length <= 80 && t !== title) return t;
+        if (t && t.length <= 80 && t !== title) return R(t, true);
       }
     }
     const lines = (row.innerText || '').split('\n').map(clean).filter(Boolean).filter(l => l !== title);
-    for (const l of lines) { const m = l.match(/^(?:standort|ort|location|einsatzort|arbeitsort)\s*[:·-]\s*(.{2,70})$/i); if (m) return m[1]; }
-    for (const l of lines) { const m = l.match(/\b\d{5}\s+[A-ZÄÖÜ][\wäöüß.\-]+(?:[ \-][A-ZÄÖÜ][\wäöüß.\-]+)?/); if (m) return m[0]; }
-    for (const l of lines) { const m = l.match(/^DE\s*[-–]\s*(.{2,40})$/i); if (m) return m[1]; }
-    for (const l of lines) if (placeLike(l)) return l;
-    return '';
+    for (const l of lines) { const m = l.match(/^(?:standort|ort|location|einsatzort|arbeitsort)\s*[:·-]\s*(.{2,70})$/i); if (m) return R(m[1], true); }
+    for (const l of lines) { const m = l.match(/\b\d{5}\s+[A-ZÄÖÜ][\wäöüß.\-]+(?:[ \-][A-ZÄÖÜ][\wäöüß.\-]+)?/); if (m) return R(m[0], true); }
+    for (const l of lines) { const m = l.match(/^DE\s*[-–]\s*(.{2,40})$/i); if (m) return R(m[1], true); }
+    for (const l of lines) if (placeLike(l)) return R(l, false);
+    return R('', false);
   };
   const out = { method: '', items: [], clusterSize: 0, candidates: 0, jsonLd: 0, hint: null, text: '', next: null, title: document.title || '' };
   const body = document.body ? document.body.innerText || '' : '';
@@ -36,8 +37,11 @@ export function pageScript() {
   out.bodyLen = body.length;
 
   // Hinweis „123 Stellen/Jobs/Treffer“
-  const hm = body.match(/(\d{1,4}(?:[.,]\d{3})?)\s*(?:offene\s+)?(?:Stellenangebote|Stellenanzeigen|Stellen\b|Jobs\b|Treffer|Ergebnisse|results|positions|vacancies|open positions)/i);
-  if (hm) out.hint = parseInt(hm[1].replace(/[.,]/g, ''), 10);
+  for (const hm of body.matchAll(/(\d{1,4}(?:[.,]\d{3})?)\s*(?:offene\s+)?(?:Stellenangebote|Stellenanzeigen|Stellen\b|Jobs\b|Treffer|Ergebnisse|results|positions|vacancies|open positions)/gi)) {
+    const n = parseInt(hm[1].replace(/[.,]/g, ''), 10);
+    if (n >= 1990 && n <= 2100) continue; // Jahreszahl („Ausbildung 2026 Stellen“), keine Anzahl
+    out.hint = n; break;
+  }
 
   // ---- 1. JSON-LD ----
   const ld = [];
@@ -74,7 +78,7 @@ export function pageScript() {
       out.method = 'successfactors';
       out.items = sf.map(a => {
         const row = a.closest('tr, li, .data-row') || a.parentElement;
-        const loc = row ? (clean((row.querySelector('.jobLocation, .colLocation, .jobFacility, [class*="location" i]') || {}).textContent) || rowLocation(row, clean(a.textContent))) : '';
+        const loc = row ? (clean((row.querySelector('.jobLocation, .colLocation, .jobFacility, [class*="location" i]') || {}).textContent) || rowLocation(row, clean(a.textContent)).t) : '';
         const date = row ? clean((row.querySelector('.jobDate, .colDate, [class*="date" i]') || {}).textContent) : '';
         return { title: clean(a.textContent), url: abs(a.getAttribute('href')), location: loc, meta: date };
       }).filter(x => x.url && !seen.has(x.url) && seen.add(x.url));
@@ -95,7 +99,7 @@ export function pageScript() {
     };
     const anchors = [...document.querySelectorAll('a[href]')].filter(a => {
       const href = a.getAttribute('href') || '';
-      if (!href || href.startsWith('#') || NAV.test(href)) return false;
+      if (!href || href === '#' || /^#?$/.test(href) || NAV.test(href)) return false;
       if (a.closest('header, footer, nav, [role="navigation"], [class*="cookie" i], [id*="cookie" i], [class*="consent" i]')) return false;
       return vis(a);
     });
@@ -130,8 +134,47 @@ export function pageScript() {
     if (best) {
       out.method = 'liste';
       out.clusterSize = best.items.length;
-      out.items = best.items.filter(i => i.hasWord || best.jobish / best.items.length > 0.5).map(({ hasWord, loc, ...r }) => ({ ...r, location: loc || '' }));
+      out.items = best.items.filter(i => i.hasWord || best.jobish / best.items.length > 0.5).map(({ hasWord, loc, ...r }) => ({ ...r, location: loc.t || '', locWeak: !!loc.t && !loc.strong }));
     }
+  }
+
+  // ---- 4. Überschriften-Karten (Titel als Überschrift, Link woanders oder gar keiner) ----
+  if (!out.items.length || out.method === 'liste') {
+    const MARK = /\(\s*[mwdfgxi]\s*[\/|]\s*[mwdfgxi](\s*[\/|]\s*[mwdfgxi])?\s*\)|\ball genders\b|\*in\b|\(gn\)/i;
+    const heads = [...document.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"]')]
+      .filter(e => !e.closest('header, footer, nav, [class*="cookie" i], [id*="cookie" i], [class*="consent" i]'))
+      .map(e => ({ el: e, text: clean(e.innerText || e.textContent) }))
+      .filter(x => x.text.length >= 6 && x.text.length <= 200 && !BAD.test(x.text));
+    const sigH = (e) => e.tagName + '.' + [...e.classList].filter(c => c.length < 28 && !/\d{3,}/.test(c)).sort().slice(0, 3).join('.') + '<' + (e.parentElement ? e.parentElement.tagName + '.' + [...e.parentElement.classList].slice(0, 2).join('.') : '');
+    const bySig = new Map();
+    for (const x of heads) { const k = sigH(x.el); (bySig.get(k) || bySig.set(k, []).get(k)).push(x); }
+    const picked = [];
+    for (const g of bySig.values()) {
+      const marked = g.filter(x => MARK.test(x.text));
+      const jobish = g.filter(x => JOBWORDS.test(x.text));
+      if (marked.length) picked.push(...marked);
+      else if (g.length >= 2 && jobish.length >= 2 && jobish.length / g.length >= 0.6) picked.push(...jobish);
+    }
+    const headSet = new Set(heads.map(x => x.el));
+    const seen4 = new Set();
+    const items4 = picked.map((x, i) => {
+      let card = x.el, hops = 0;
+      while (card.parentElement && hops < 7) {
+        const par = card.parentElement;
+        if (par === document.body || [...par.querySelectorAll('h1,h2,h3,h4,h5,h6,[role="heading"]')].some(o => o !== x.el && headSet.has(o) && picked.some(p => p.el === o))) break;
+        card = par; hops++;
+      }
+      let a = x.el.closest('a[href]');
+      if (!a) {
+        const as = [...card.querySelectorAll('a[href]')].filter(l => !NAV.test(l.getAttribute('href') || '') && !/^(#?|javascript:.*)$/i.test(l.getAttribute('href') || ''));
+        a = as.find(l => /(mehr|details|zur stelle|ansehen|bewerben|apply|read more|learn more|weiter)/i.test(clean(l.textContent))) || as[0];
+      }
+      let url = a ? abs(a.getAttribute('href')) : '';
+      if (!url) url = location.href.split('#')[0] + '#' + (x.el.id || card.id || 'stelle-' + (i + 1));
+      const lc = rowLocation(card, x.text);
+      return { title: x.text.replace(/\s*\n\s*/g, ' '), url, location: lc.t, locWeak: !!lc.t && !lc.strong, meta: '' };
+    }).filter(it => it.url && !seen4.has(it.url) && seen4.add(it.url));
+    if (items4.length && (!out.items.length || items4.length > out.items.length * 1.4)) { out.method = 'ueberschriften'; out.items = items4; out.clusterSize = items4.length; }
   }
 
   // Ort aus Zusatztext herausziehen (PLZ + Ort oder „Standort: …“)

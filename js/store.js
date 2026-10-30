@@ -18,7 +18,7 @@ export function defaultSettings() {
     synonymsText: synonymsToText(DEFAULT_SYNONYMS),
     excludeStudent: DEFAULT_EXCLUDE_STUDENT,
     excludeDefence: DEFAULT_EXCLUDE_DEFENCE,
-    hide: { student: true, defence: true, branchen: ['Automotive', 'Rüstung'] },
+    hide: { student: false, defence: false, branche: false, branchen: ['Automotive'] }, hideV: 2,
     followUpWeeks: [6, 8],
     github: { owner: '', repo: '' },
     ai: { provider: 'anthropic', model: 'claude-sonnet-5-5' },
@@ -35,6 +35,7 @@ function normalizeDb(x) {
   const d = emptyDb();
   if (!x || typeof x !== 'object') return d;
   if (x.settings) d.settings = { ...d.settings, ...x.settings, profile: { ...d.settings.profile, ...(x.settings.profile || {}) }, hide: { ...d.settings.hide, ...(x.settings.hide || {}) }, github: { ...d.settings.github, ...(x.settings.github || {}) }, ai: { ...d.settings.ai, ...(x.settings.ai || {}) } };
+  if (x.settings && x.settings.hideV !== 2) d.settings.hide = { student: false, defence: false, branche: false, branchen: ['Automotive'] }, d.settings.hideV = 2; // ab 1.0.12: nichts standardmäßig ausblenden
   COLLS.forEach(c => { if (x[c] && typeof x[c] === 'object') d[c] = x[c]; });
   return d;
 }

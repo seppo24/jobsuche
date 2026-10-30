@@ -55,5 +55,5 @@ export function evaluate({ items = [], method = '', hint = null, httpStatus = 20
 }
 
 export function methodLabel(m) {
-  return ({ jsonld: 'strukturierte Daten der Seite', successfactors: 'SuccessFactors-Jobliste', workday: 'Workday-Schnittstelle', ba: 'Schnittstelle der Bundesagentur für Arbeit', liste: 'wiederkehrende Listenstruktur' })[m] || m || 'unbekannt';
+  return ({ jsonld: 'strukturierte Daten der Seite', successfactors: 'SuccessFactors-Jobliste', workday: 'Workday-Schnittstelle', ba: 'Schnittstelle der Bundesagentur für Arbeit', liste: 'wiederkehrende Listenstruktur', ueberschriften: 'Stellen-Überschriften der Seite' })[m] || m || 'unbekannt';
 }

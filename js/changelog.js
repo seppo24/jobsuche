@@ -1,9 +1,21 @@
 // Versionsverlauf – wird in der App unter „Info“ angezeigt.
 // Bei jeder Änderung: neuen Eintrag OBEN einfügen, VERSION erhöhen und in sw.js die CACHE-Version anpassen.
 
-export const VERSION = '1.0.11';
+export const VERSION = '1.0.12';
 
 export const CHANGELOG = [
+  {
+    version: '1.0.12',
+    date: '2026-10-30',
+    title: 'Einsatzort, Ausland, Ausblenden, weitere Listenformen',
+    items: [
+      'Ausgeblendete Stellen (Ausbildung/Studium, Rüstung, Automotive) sind jetzt standardmäßig sichtbar; in der Stellensuche gibt es dafür eigene „Ausblenden“-Schalter.',
+      'Einsatzort wird bei Bedarf aus der Stellen-Detailseite gelesen (Pin-Symbol, Feld „Standort“, strukturierte Daten). Zufällige Wörter wie „Berufserfahrene“ werden nicht mehr als Ort übernommen.',
+      'Stellen im Ausland (z. B. Niederlande) werden beim Umkreisfilter ausgeschlossen und mit „Ausland“ markiert. Neuer Schalter „Ort bekannt“.',
+      'Neue Listenerkennung: Stellen als Überschriften-Karten (mit oder ohne Link), Akkordeons mit #-Links, Stellen als Überschriften im Fließtext.',
+      'Jahreszahlen wie „2026“ werden nicht mehr als Stellenanzahl gewertet.'
+    ],
+  },
   {
     version: '1.0.11',
     date: '2026-10-29',

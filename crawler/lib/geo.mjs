@@ -32,6 +32,9 @@ export function lookupBuiltin(location) {
 }
 
 /** Ortstext säubern: Ländercodes, Klammern, „Hybrid/Remote“, mehrere Orte → Liste möglicher Orte. */
+const FOREIGN = /\b(netherlands|niederlande|nederland|belgium|belgien|belgie|luxembourg|luxemburg|france|frankreich|italy|italien|spain|spanien|portugal|poland|polen|czech|tschechien|slovakia|slowakei|hungary|ungarn|romania|rum[aä]nien|bulgaria|bulgarien|serbia|serbien|croatia|kroatien|slovenia|slowenien|austria|[oö]sterreich|switzerland|schweiz|denmark|d[aä]nemark|sweden|schweden|norway|norwegen|finland|finnland|ireland|irland|united kingdom|great britain|england|scotland|uk|usa|united states|u\.s\.a|canada|kanada|mexico|mexiko|brazil|brasilien|argentina|argentinien|china|india|indien|japan|korea|singapore|singapur|thailand|vietnam|malaysia|indonesia|indonesien|turkey|t[uü]rkei|t[uü]rkiye|israel|egypt|[aä]gypten|south africa|s[uü]dafrika|australia|australien|uae|emirates|saudi|morocco|marokko|tunisia|tunesien|russia|russland|ukraine|greece|griechenland|estonia|estland|latvia|lettland|lithuania|litauen|philippines|philippinen|taiwan)\b/i;
+export const isForeign = loc => FOREIGN.test(String(loc || '')) && !/\b(deutschland|germany)\b/i.test(String(loc || ''));
+
 export function cleanLocation(loc) {
   return String(loc || '').replace(/\(.*?\)/g, ' ').replace(/\b(hybrid|remote|homeoffice|home office|mobil|vor ort|on-?site|deutschlandweit|bundesweit)\b/gi, ' ')
     .replace(/\bDE\s*[-–]\s*/g, '').replace(/,\s*(DE|DEU|Deutschland|Germany|Nordrhein-Westfalen|NRW|NW)\b/gi, '').replace(/\b\d{5}\b/g, ' ')
@@ -56,10 +59,14 @@ export async function distanceFor(location, home, cache, { fetchImpl = fetch, on
   if (!online) return null;
   try {
     await new Promise(r => setTimeout(r, 1100));
-    const q = encodeURIComponent(location.replace(/\b\d{5}\b/, '').trim() + ', Deutschland');
-    const r = await fetchImpl(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=de,at,ch,nl,be&q=${q}`, { headers: { 'User-Agent': 'jobsuche-privat-app/1.0 (persoenliche Nutzung)' } });
+    const q = encodeURIComponent(location.replace(/\b\d{5}\b/, '').trim());
+    const r = await fetchImpl(`https://nominatim.openstreetmap.org/search?format=json&limit=5&addressdetails=0&q=${q}`, { headers: { 'User-Agent': 'jobsuche-privat-app/1.0 (persoenliche Nutzung)', 'Accept-Language': 'de' } });
     const j = await r.json();
-    if (j[0]) { cache[key] = [+j[0].lat, +j[0].lon]; return haversine(h, cache[key]); }
+    const cands = (Array.isArray(j) ? j : []).filter(x => ['city', 'town', 'village', 'hamlet', 'suburb', 'municipality', 'administrative', 'locality', 'neighbourhood', 'quarter', 'borough', 'county'].includes(x.addresstype) || ['place', 'boundary'].includes(x.class));
+    if (cands.length) { // bei mehrdeutigen Namen („Neustadt“) gilt der Ort, der am nächsten zum Wohnort liegt
+      const best = cands.map(x => [+x.lat, +x.lon]).sort((a, b) => haversine(h, a) - haversine(h, b))[0];
+      cache[key] = best; return haversine(h, best);
+    }
     cache[key] = null;
   } catch { /* offline o. Ä. – später erneut */ }
   return null;

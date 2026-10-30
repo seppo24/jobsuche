@@ -1,5 +1,5 @@
 import { h, fmtRel, daysBetween, debounce, lsGet, lsSet, uid, nowIso } from '../util.js';
-import { S, list, get, put, del, settings } from '../store.js';
+import { S, list, get, put, del, settings, setSettings } from '../store.js';
 import { norm, parseQuery, matchTitle, excludedBy, synonymsFromText } from '../search.js';
 import { toast, statusPill, emptyState, mount, input } from '../ui.js';
 import { portals, searchUrl, canTrigger, triggerCrawl } from '../portals.js';
@@ -7,14 +7,14 @@ import { openTailor } from './tailor.js';
 import { openApplicationForm } from './applications.js';
 
 const PREF = 'jobsuche.jobsview';
-const st = Object.assign({ q: null, emp: '', similar: true, near: false, fresh: false, saved: false, showHidden: false, limit: 60 }, lsGet(PREF, {}));
-const savePref = () => lsSet(PREF, { similar: st.similar, near: st.near, fresh: st.fresh });
+const st = Object.assign({ q: null, emp: '', similar: true, near: false, fresh: false, saved: false, known: false, limit: 60 }, lsGet(PREF, {}));
+const savePref = () => lsSet(PREF, { similar: st.similar, near: st.near, fresh: st.fresh, known: st.known });
 
 export const NEW_DAYS = 7;
 export const isNew = j => j.firstSeen && daysBetween(j.firstSeen) <= NEW_DAYS;
 
 /** Sucht und filtert; liefert { rows, hidden, total }. */
-export function searchJobs({ q, emp = '', similar = true, near = false, fresh = false, showHidden = false }) {
+export function searchJobs({ q, emp = '', similar = true, near = false, fresh = false, known = false, showHidden = false }) {
   const s = settings();
   const groups = synonymsFromText(s.synonymsText);
   const phrases = parseQuery(q);
@@ -30,9 +30,10 @@ export function searchJobs({ q, emp = '', similar = true, near = false, fresh = 
     let reason = null;
     if (s.hide?.student && (reason = excludedBy(j, s.excludeStudent, j.meta))) reason = 'Ausbildung/Studium (' + reason + ')';
     else if (s.hide?.defence && (reason = excludedBy(j, s.excludeDefence, j.employer + ' ' + (j.meta || '')))) reason = 'Rüstung (' + reason + ')';
-    else if ((s.hide?.branchen || []).includes(e.branche) && e.branche) reason = 'Branche ' + e.branche;
+    else if (s.hide?.branche && e.branche && (s.hide.branchen || []).includes(e.branche)) reason = 'Branche ' + e.branche;
     if (reason && !showHidden) { hidden++; continue; }
-    if (near && j.distanceKm != null && j.distanceKm > (s.profile.radiusKm || 50)) continue;
+    if (near && ((j.distanceKm != null && j.distanceKm > (s.profile.radiusKm || 50)) || j.foreign)) continue;
+    if (known && j.distanceKm == null) continue;
     if (fresh && !isNew(j)) continue;
     rows.push({ job: j, match: m, emp: e, hiddenReason: reason });
   }
@@ -66,6 +67,7 @@ export function renderJobCard(r, rerender) {
         h('span', null, j.employer || emp.name),
         j.location ? h('span', null, j.location + (dist ? ` · ${dist}` : '')) : (dist ? h('span', null, dist) : null),
         isNew(j) ? h('span', { class: 'chip new' }, 'neu') : null,
+        j.foreign ? h('span', { class: 'chip' }, 'Ausland') : (!j.location ? h('span', { class: 'chip', title: 'Der Einsatzort ließ sich nicht erkennen – bitte in der Anzeige prüfen' }, 'Ort unbekannt') : null),
         m.kind !== 'alle' && m.kind !== 'exakt' ? h('span', { class: 'chip match', title: m.via ? `über „${m.via}“` : '' }, KIND_LABEL[m.kind] + (m.via ? `: ${m.via}` : '')) : null,
         j.stale ? h('span', { class: 'chip', title: 'Beim letzten Abruf nicht erreichbar – Stand von früher' }, 'älterer Stand') : null,
         r.hiddenReason ? h('span', { class: 'chip' }, 'normalerweise ausgeblendet: ' + r.hiddenReason) : null),
@@ -94,14 +96,17 @@ export function render(el, params = {}) {
     return b;
   };
 
+  const hideTg = (label, key) => {
+    const b = h('button', { class: 'toggle', type: 'button', 'aria-pressed': String(!!settings().hide[key]), onclick: () => { const hd = settings().hide; setSettings({ hide: { ...hd, [key]: !hd[key] } }); b.setAttribute('aria-pressed', String(!!settings().hide[key])); st.limit = 60; draw(); } }, label);
+    return b;
+  };
   function draw() {
     const { rows, hidden, total } = searchJobs(st);
     const shown = st.saved ? rows.filter(r => savedFor(r.job.id)) : rows;
     mount(info,
       !fresh ? h('div', { class: 'banner info' }, 'Es liegen noch keine abgerufenen Stellen vor. ', h('span', null, 'Sobald der automatische Abruf (GitHub Actions) einmal gelaufen ist, erscheinen sie hier. Bis dahin helfen die Portal-Suchlinks unten.')) : null,
       fresh ? h('p', { class: 'muted small' }, `${shown.length} Treffer von ${total} Stellen · Stand ${fmtRel(fresh)}`, st.emp && canTrigger() ? [' · ', h('button', { class: 'btn ghost small', type: 'button', onclick: async e => { e.target.disabled = true; try { await triggerCrawl(st.emp); toast('Abruf gestartet – dauert ca. 1–3 Minuten, dann „Info → Abgleichen“.', 'ok'); } catch (x) { toast(x.message, 'bad'); } e.target.disabled = false; } }, 'Diesen Arbeitgeber jetzt neu abrufen')] : null) : null,
-      hidden && !st.showHidden ? h('div', { class: 'banner' }, `${hidden} ${hidden === 1 ? 'Stelle ist' : 'Stellen sind'} ausgeblendet (Ausbildung/Studium, Rüstung, Branche Automotive). `, h('button', { class: 'btn small', type: 'button', onclick: () => { st.showHidden = true; draw(); } }, 'Anzeigen')) : null,
-      st.showHidden ? h('div', { class: 'banner' }, 'Ausgeblendete Stellen werden mit angezeigt. ', h('button', { class: 'btn small', type: 'button', onclick: () => { st.showHidden = false; draw(); } }, 'Wieder ausblenden')) : null);
+      null);
     const part = shown.slice(0, st.limit);
     mount(listBox,
       part.map(r => renderJobCard(r, draw)),
@@ -122,7 +127,8 @@ export function render(el, params = {}) {
     h('h1', null, 'Stellen'),
     h('div', { class: 'card' },
       h('div', { class: 'grid2' }, h('label', { class: 'field' }, h('span', { class: 'lbl' }, 'Suche'), qIn), h('label', { class: 'field' }, h('span', { class: 'lbl' }, 'Arbeitgeber'), empSel)),
-      h('div', { class: 'filters' }, tg('Ähnliche Titel', 'similar', 'Projektleiter findet auch Projektmanager usw.'), tg(`Umkreis ${s.profile.radiusKm || 50} km`, 'near', 'Nur Stellen im Umkreis um ' + s.profile.ort), tg(`Neu (${NEW_DAYS} Tage)`, 'fresh'), tg('★ Gemerkt', 'saved'))),
+      h('div', { class: 'filters' }, tg('Ähnliche Titel', 'similar', 'Projektleiter findet auch Projektmanager usw.'), tg(`Umkreis ${s.profile.radiusKm || 50} km`, 'near', 'Nur Stellen im Umkreis um ' + s.profile.ort + ' (Stellen im Ausland fallen heraus)'), tg('Ort bekannt', 'known', 'Stellen ohne erkennbaren Einsatzort ausblenden'), tg(`Neu (${NEW_DAYS} Tage)`, 'fresh'), tg('★ Gemerkt', 'saved')),
+      h('div', { class: 'filters', style: 'margin-top:-.5rem' }, h('span', { class: 'muted small' }, 'Ausblenden:'), hideTg('Ausbildung/Studium', 'student'), hideTg('Rüstung', 'defence'), hideTg('Automotive', 'branche'))),
     info, listBox, portalBox);
   draw();
 }

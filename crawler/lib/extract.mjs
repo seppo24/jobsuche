@@ -117,7 +117,7 @@ export async function fetchDescription(context, url) {
   } catch { return ''; } finally { await page.close().catch(() => {}); }
 }
 
-/** Einsatzort aus der Detailseite einer Stelle lesen (JSON-LD, sonst „Standort: …“ im Text). */
+/** Einsatzort aus der Detailseite einer Stelle lesen: strukturierte Daten, beschriftete Felder, Orts-Symbole (Pin) – sonst Kandidaten für die Ortsliste. */
 export async function fetchJobLocation(context, url) {
   const page = await context.newPage();
   try {
@@ -126,23 +126,54 @@ export async function fetchJobLocation(context, url) {
     await page.evaluate(consentScript).catch(() => {});
     return await page.evaluate(() => {
       const clean = t => (t || '').replace(/\s+/g, ' ').trim();
+      const vis = el => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+      const res = (location, how) => ({ location: clean(location).slice(0, 120), how, candidates: [] });
+      // 1. JSON-LD JobPosting
       for (const sc of document.querySelectorAll('script[type="application/ld+json"]')) {
         try {
           const walk = n => Array.isArray(n) ? n.flatMap(walk) : n && typeof n === 'object' ? [n, ...walk(n['@graph'] || [])] : [];
           const jp = walk(JSON.parse(sc.textContent)).find(x => [].concat(x['@type'] || []).includes('JobPosting'));
           if (jp) {
-            const locs = [].concat(jp.jobLocation || []).map(l => { const a = l.address || {}; return [a.postalCode, a.addressLocality || (typeof a === 'string' ? a : ''), a.addressRegion].filter(Boolean).join(' '); }).filter(Boolean);
-            if (locs.length) return [...new Set(locs)].join('; ');
+            const locs = [].concat(jp.jobLocation || []).map(l => { const a = (l && l.address) || {}; return typeof a === 'string' ? a : [a.postalCode, a.addressLocality, a.addressRegion, a.addressCountry && (a.addressCountry.name || a.addressCountry)].filter(Boolean).join(' '); }).filter(Boolean);
+            if (locs.length) return res([...new Set(locs)].join('; '), 'jsonld');
           }
         } catch { /* weiter */ }
       }
+      // 2. Microdaten
+      const mi = document.querySelector('[itemprop="addressLocality"], [itemprop="jobLocation"]');
+      if (mi && clean(mi.textContent)) return res(mi.textContent, 'itemprop');
+      // 3. Orts-Symbol (Pin, map-marker, location) – der Ort steht direkt daneben
+      const ICON = /(map-?marker|map-?pin|location|geo-?alt|\bpin\b|place|standort|ort\b)/i;
+      const h1 = document.querySelector('h1');
+      const scope = h1 ? (h1.closest('main, article, section, [class*="job" i], [class*="detail" i]') || document.body) : document.body;
+      for (const ic of scope.querySelectorAll('i, svg, span[class*="icon" i], img[alt], [class*="icon" i]')) {
+        const key = [ic.className && ic.className.baseVal !== undefined ? ic.className.baseVal : ic.className, ic.getAttribute('aria-label'), ic.getAttribute('title'), ic.getAttribute('alt'), ic.getAttribute('data-icon'), (ic.querySelector && ic.querySelector('use')) ? (ic.querySelector('use').getAttribute('href') || ic.querySelector('use').getAttribute('xlink:href')) : ''].join(' ');
+        if (!ICON.test(key) || /(mail|phone|email|share)/i.test(key)) continue;
+        const holder = ic.parentElement; if (!holder) continue;
+        let t = clean(holder.innerText || holder.textContent);
+        if (t.length > 80 || !t) { const sib = ic.nextElementSibling || ic.nextSibling; t = clean(sib && (sib.innerText || sib.textContent)); }
+        if (t && t.length <= 80 && !/(vollzeit|teilzeit|unbefristet|handwerk|berufserfahr)/i.test(t)) return res(t.replace(/^(standort|ort|location|einsatzort)\s*[:·-]?\s*/i, ''), 'icon');
+      }
+      // 4. Beschriftete Felder: „Einsatzort: …“, Tabellen/Definitionslisten
+      for (const lab of scope.querySelectorAll('dt, th, td, strong, b, label, span, div')) {
+        const lt = clean(lab.childElementCount ? '' : lab.textContent);
+        if (!/^(standort|einsatzort|arbeitsort|dienstort|ort|location|work location|city|stadt)\s*:?$/i.test(lt)) continue;
+        const val = lab.nextElementSibling ? clean(lab.nextElementSibling.innerText || lab.nextElementSibling.textContent) : clean((lab.parentElement && lab.parentElement.innerText || '').replace(lt, ''));
+        if (val && val.length <= 80) return res(val, 'feld');
+      }
       const body = (document.body.innerText || '').slice(0, 20000);
       const m = body.match(/(?:Standort|Einsatzort|Arbeitsort|Dienstort|Location|Work location|Ort)\s*[:\n]\s*([^\n]{3,80})/i);
-      if (m) return clean(m[1]);
+      if (m) return res(m[1], 'text');
       const meta = document.querySelector('meta[name="geo.placename"], meta[property="og:locality"], meta[name="job-location"]');
-      return meta ? clean(meta.content) : '';
+      if (meta && meta.content) return res(meta.content, 'meta');
+      // 5. Kandidaten: kurze Zeilen nahe der Überschrift (werden in Node gegen die Ortsliste geprüft)
+      const cand = [];
+      const lines = (scope.innerText || '').split('\n').map(clean).filter(l => l.length >= 3 && l.length <= 45);
+      const hi = h1 ? lines.findIndex(l => clean(h1.textContent).startsWith(l.slice(0, 20))) : 0;
+      for (const l of lines.slice(Math.max(hi, 0), Math.max(hi, 0) + 25)) cand.push(l);
+      return { location: '', how: '', candidates: cand };
     });
-  } catch { return ''; } finally { await page.close().catch(() => {}); }
+  } catch { return { location: '', how: '', candidates: [] }; } finally { await page.close().catch(() => {}); }
 }
 
 /** Eine Quelle komplett abarbeiten: Abruf → Erkennung → Bewertung (+ Adress-Vorschläge). */
