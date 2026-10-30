@@ -1,9 +1,18 @@
 // Versionsverlauf – wird in der App unter „Info“ angezeigt.
 // Bei jeder Änderung: neuen Eintrag OBEN einfügen, VERSION erhöhen und in sw.js die CACHE-Version anpassen.
 
-export const VERSION = '1.0.16';
+export const VERSION = '1.0.17';
 
 export const CHANGELOG = [
+  {
+    version: '1.0.17',
+    date: '2026-10-30',
+    title: 'Arbeitgebersuche: mehr Treffer, klare Meldung',
+    items: [
+      'Die Arbeitgebersuche nutzt zusätzlich breitere Suchbegriffe (Ingenieur, Techniker, Konstrukteur, Leiter …) und zeigt bis zu 40 Vorschläge.',
+      'Das Ergebnis nennt jetzt, wie viele Arbeitgeber gefunden wurden, wie viele schon in deiner Liste stehen oder Personaldienstleister sind – und meldet, wenn die Bundesagentur nicht antwortet.',
+    ],
+  },
   {
     version: '1.0.16',
     date: '2026-10-30',

@@ -8,9 +8,11 @@ const AGENCY = /(zeitarbeit|personal(dienst|service|beratung|vermittlung|managem
 const AGGREGATOR = /(arbeitsagentur|stepstone|indeed|linkedin|xing|kimeta|jobware|monster|meinestadt|stellenanzeigen|jobs\.de|jobscout|jooble|gigajob|careerjet|bewerbung\.net|google|facebook|kununu|wikipedia)/i;
 const nrm = x => String(x || '').toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss').replace(/[^a-z0-9]+/g, ' ').trim();
 
+export const stats = { requests: 0, failed: 0, lastStatus: '', lastError: '' };
 async function jget(url, headers = {}, ms = 20000, asText = false) {
+  stats.requests++;
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms);
-  try { const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) Chrome/124.0', 'Accept-Language': 'de', ...headers }, signal: ctl.signal, redirect: 'follow' }); if (!r.ok) return null; return asText ? await r.text() : await r.json(); } catch { return null; } finally { clearTimeout(t); }
+  try { const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) Chrome/124.0', 'Accept-Language': 'de', ...headers }, signal: ctl.signal, redirect: 'follow' }); if (!r.ok) { stats.failed++; stats.lastStatus = 'HTTP ' + r.status; return null; } return asText ? await r.text() : await r.json(); } catch (e) { stats.failed++; stats.lastError = String(e.message || e).slice(0, 120); return null; } finally { clearTimeout(t); }
 }
 
 /** Größe aus Text („über 1.200 Mitarbeitende“) → Zahl oder null. */
@@ -64,11 +66,13 @@ async function profileOf(origin) {
   return { description: (meta('description') || meta('og:description')).slice(0, 300), employees: employeesFrom(text), title: (html.match(/<title>([^<]+)<\/title>/i) || [])[1]?.trim() || '' };
 }
 
-export async function discoverEmployers({ context, ort, radius, queries, known = [], ignored = [], limit = 30, log = () => {} }) {
+export async function discoverEmployers({ context, ort, radius, queries, known = [], ignored = [], limit = 40, log = () => {} }) {
   const knownKeys = new Set(known.map(n => nameTokens(n).join(' ')).concat(ignored.map(n => nameTokens(n).join(' '))));
-  const all = await collectEmployers({ ort, radius, queries });
-  log(`Arbeitgeber mit offenen Stellen: ${all.length}`);
-  const fresh = all.filter(e => !e.agency && !knownKeys.has(e.key)).slice(0, limit);
+  const broad = ['Ingenieur', 'Techniker', 'Konstrukteur', 'Leiter', 'Maschinenbau', 'Servicetechniker', 'Elektroniker', 'Mechatroniker'];
+  const all = await collectEmployers({ ort, radius, queries: [...new Set([...queries, ...broad])] });
+  log(`Arbeitgeber mit offenen Stellen: ${all.length} (Anfragen ${stats.requests}, fehlgeschlagen ${stats.failed} ${stats.lastStatus} ${stats.lastError})`);
+  const afterKnown = all.filter(e => !e.agency && !knownKeys.has(e.key));
+  const fresh = afterKnown.slice(0, limit);
   const out = [];
   let i = 0;
   const worker = async () => {
@@ -88,5 +92,5 @@ export async function discoverEmployers({ context, ort, radius, queries, known =
     }
   };
   await Promise.all([worker(), worker(), worker()]);
-  return { generatedAt: new Date().toISOString(), ort, radius, total: all.length, skippedAgencies: all.filter(e => e.agency).length, items: out.sort((a, b) => b.count - a.count) };
+  return { generatedAt: new Date().toISOString(), ort, radius, total: all.length, skippedAgencies: all.filter(e => e.agency).length, skippedKnown: all.filter(e => !e.agency && knownKeys.has(e.key)).length, more: Math.max(0, afterKnown.length - fresh.length), requests: stats.requests, failed: stats.failed, error: stats.failed && !all.length ? (stats.lastStatus || stats.lastError || 'Anfrage fehlgeschlagen') : '', items: out.sort((a, b) => b.count - a.count) };
 }

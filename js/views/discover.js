@@ -17,7 +17,7 @@ function watch(before, onDone) {
   const t0 = Date.now();
   const tick = async () => {
     const d = await load().catch(() => null);
-    if (d && d.generatedAt !== before) { polling = false; notice(`Die Suche nach weiteren Arbeitgebern ist abgeschlossen: ${d.items.length} Vorschläge für ${d.ort}.`, 'ok'); onDone(d); return; }
+    if (d && d.generatedAt !== before) { polling = false; notice(d.error ? `Die Arbeitgebersuche konnte die Bundesagentur nicht abfragen (${d.error}).` : `Die Suche nach weiteren Arbeitgebern ist abgeschlossen: ${d.items.length} Vorschläge für ${d.ort} (${d.total} Arbeitgeber mit passenden Stellen gefunden, davon ${d.skippedKnown || 0} schon in deiner Liste).`, d.error ? 'bad' : 'ok'); onDone(d); return; }
     if (Date.now() - t0 > 20 * 60000) { polling = false; notice('Die Arbeitgebersuche hat nach 20 Minuten kein Ergebnis geliefert. Bitte in GitHub unter „Actions“ nachsehen.', 'bad'); return; }
     setTimeout(tick, 20000);
   };
@@ -57,10 +57,10 @@ export function openDiscover(after = () => {}) {
     const list = h('div');
     const paint = (d) => {
       list.replaceChildren(...(d && d.items.length ? [
-        h('p', { class: 'muted small' }, `Stand ${fmtRel(d.generatedAt)} · ${d.ort}, ${d.radius} km · ${d.total} Arbeitgeber mit passenden offenen Stellen, ${d.skippedAgencies || 0} Personaldienstleister ausgelassen.`),
+        h('p', { class: 'muted small' }, `Stand ${fmtRel(d.generatedAt)} · ${d.ort}, ${d.radius} km · ${d.total} Arbeitgeber mit passenden offenen Stellen · ${d.skippedKnown || 0} schon in deiner Liste · ${d.skippedAgencies || 0} Personaldienstleister ausgelassen` + (d.more ? ` · ${d.more} weitere nicht angezeigt` : '') + '.'),
         ...d.items.filter(c => !(settings().ignoredEmployers || []).includes(c.name)).map(c => h('button', { class: 'emp', type: 'button', onclick: () => candidateSheet(c, () => { paint(d); after(); }) },
           h('div', { class: 'grow' }, h('div', { class: 'n' }, c.name), h('div', { class: 's' }, (c.size ? c.size + (c.employees ? ` (~${c.employees.toLocaleString('de-DE')})` : '') + ' · ' : '') + (c.locations || []).slice(0, 2).join(', ') + (c.minKm != null ? ` · ${c.minKm} km` : ''))),
-          h('span', { class: 'chip' }, c.count + ' Stellen')))] : [d ? emptyState('Keine neuen Arbeitgeber', 'Alle gefundenen Arbeitgeber stehen schon in deiner Liste oder wurden ausgeblendet.') : h('p', { class: 'muted' }, 'Noch keine Suche durchgeführt.')]));
+          h('span', { class: 'chip' }, c.count + ' Stellen')))] : [d ? emptyState(d.error ? 'Abfrage fehlgeschlagen' : 'Keine neuen Arbeitgeber', d.error ? `Die Bundesagentur hat nicht geantwortet (${d.error}; ${d.failed || 0} von ${d.requests || 0} Anfragen fehlgeschlagen).` : `Gefunden: ${d.total} Arbeitgeber, davon ${d.skippedKnown || 0} schon in deiner Liste und ${d.skippedAgencies || 0} Personaldienstleister. Ein größerer Umkreis findet mehr.`) : h('p', { class: 'muted' }, 'Noch keine Suche durchgeführt.')]));
     };
     let last = null;
     load().then(d => { last = d; paint(d); }).catch(() => paint(null));
