@@ -131,7 +131,7 @@ export function analysisPrompt(text, employer) {
   const system = 'Du bist Experte für die Auswertung deutscher Arbeitszeugnisse (Zeugnissprache, Schulnotensystem 1 = sehr gut bis 5 = mangelhaft). Du bewertest ausschließlich, was im Text steht, erfindest nichts und nennst Unsicherheit offen. Antworte NUR mit einem JSON-Objekt, ohne Erklärtext davor oder danach.';
   const user = `Bewerte dieses Arbeitszeugnis${employer ? ' von „' + employer + '“' : ''}.
 
-Liefere dieses JSON:
+Fasse dich kurz: höchstens 6 Einzelnoten, 6 auffällige Formulierungen, je 4 Stärken/Schwächen, Zitate höchstens 15 Wörter. Liefere dieses JSON:
 {
  "gesamtnote": Zahl von 1.0 bis 5.0 (eine Nachkommastelle),
  "einzelnoten": [ { "bereich": "Leistung/Arbeitserfolg" | "Arbeitsweise" | "Fachwissen" | "Führung (falls vorhanden)" | "Verhalten" | "Schlussformel", "note": Zahl, "beleg": "kurzes wörtliches Zitat" } ],
@@ -150,9 +150,25 @@ ${String(text).slice(0, 14000)}
   return { system, user };
 }
 
+/** JSON lesen; bei abgeschnittener Antwort (Längenlimit) werden offene Klammern geschlossen. */
+export function lenientJson(text) {
+  const start = String(text).indexOf('{'); if (start < 0) throw new Error('Antwort der KI nicht lesbar');
+  let t = String(text).slice(start);
+  try { return JSON.parse(t.slice(0, t.lastIndexOf('}') + 1)); } catch { /* reparieren */ }
+  // abgeschnitten: bis zum letzten vollständigen Element kürzen und Klammern schließen
+  for (let cut = t.length; cut > 0; cut = Math.max(t.lastIndexOf(',', cut - 1), -1) < 1 ? 0 : t.lastIndexOf(',', cut - 1)) {
+    let c = t.slice(0, cut), inStr = false, esc = false; const st = [];
+    for (const ch of c) { if (esc) { esc = false; continue; } if (ch === '\\') { esc = true; continue; } if (ch === '"') inStr = !inStr; if (inStr) continue; if (ch === '{' || ch === '[') st.push(ch); else if (ch === '}' || ch === ']') st.pop(); }
+    if (inStr) continue;
+    c = c.replace(/,\s*$/, '') + st.reverse().map(x => x === '{' ? '}' : ']').join('');
+    try { return JSON.parse(c); } catch { /* weiter kürzen */ }
+    if (!cut) break;
+  }
+  throw new Error('Antwort der KI nicht lesbar (zu lang abgeschnitten)');
+}
+
 export function parseAnalysis(raw) {
-  const m = String(raw).match(/\{[\s\S]*\}/); if (!m) throw new Error('Antwort der KI nicht lesbar');
-  const j = JSON.parse(m[0]);
+  const j = lenientJson(raw);
   const num = x => { const n = parseFloat(String(x).replace(',', '.')); return isFinite(n) ? Math.min(6, Math.max(1, Math.round(n * 10) / 10)) : null; };
   return {
     note: num(j.gesamtnote), einzel: (j.einzelnoten || []).map(e => ({ bereich: String(e.bereich || ''), note: num(e.note), beleg: String(e.beleg || '') })),
@@ -168,7 +184,7 @@ export async function analyzeZeugnis({ text, employer, apiKey, model, callClaude
   const base = { at: new Date().toISOString(), formel: f ? f.formel : '', formelNote: f ? f.note : null };
   if (!apiKey || !callClaude) return { ...base, quelle: 'Formel', note: f ? f.note : null, einzel: [], auffaelligkeiten: [], fehlend: [], staerken: [], schwaechen: [], fazit: f ? `Nur anhand der Zufriedenheitsformel („${f.formel}“) eingeschätzt. Für eine ausführliche Bewertung einen KI-Zugang unter Info → Einstellungen hinterlegen.` : 'Keine Zufriedenheitsformel gefunden und kein KI-Zugang hinterlegt.', sicherheit: 'niedrig' };
   const { system, user } = analysisPrompt(text, employer);
-  const raw = await callClaude({ apiKey, model, system, user, maxTokens: 3000 });
+  const raw = await callClaude({ apiKey, model, system, user, maxTokens: 8000 });
   return { ...base, ...parseAnalysis(raw), quelle: 'KI' };
 }
 

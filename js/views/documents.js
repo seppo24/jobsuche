@@ -28,7 +28,7 @@ async function analyzeDoc(doc, text, { keepText = false } = {}) {
   if (!text || text.replace(/\s+/g, '').length < 60) throw new Error('Im Dokument ließ sich kein Text lesen (Scan oder Foto?).');
   let a;
   try { a = await analyzeZeugnis({ text, employer: doc.employer, apiKey: aiKey(), model: settings().ai?.model || 'claude-sonnet-5-5', callClaude }); }
-  catch (e) { a = { ...(await analyzeZeugnis({ text, employer: doc.employer })), fehler: e.message }; }
+  catch (e) { const f = await analyzeZeugnis({ text, employer: doc.employer }); a = { ...f, fazit: f.note ? `Die KI-Bewertung ist fehlgeschlagen – angezeigt ist nur die Note aus der Zufriedenheitsformel („${f.formel}“). Mit „Erneut bewerten“ lässt sich die Bewertung wiederholen.` : 'Die KI-Bewertung ist fehlgeschlagen und im Text fand sich keine Zufriedenheitsformel. Mit „Erneut bewerten“ lässt sich die Bewertung wiederholen.', fehler: e.message }; }
   put('documents', { ...doc, analysis: a, text: keepText ? text.slice(0, 12000) : doc.text });
   return a;
 }
