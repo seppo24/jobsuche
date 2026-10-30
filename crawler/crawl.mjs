@@ -1,6 +1,8 @@
 // Täglicher Stellenabruf. Liest Arbeitgeber aus der Dropbox (db.json), schreibt jobs.json zurück.
 import crypto from 'node:crypto';
 import { chromium } from 'playwright';
+import { discoverEmployers } from './lib/discover.mjs';
+import { scanTarif } from './lib/tarif.mjs';
 import { makeStore } from './lib/dropbox.mjs';
 import { crawlEmployer, fetchDescription, fetchJobLocation } from './lib/extract.mjs';
 import { crawlBA } from './lib/adapters.mjs';
@@ -45,6 +47,18 @@ let altBrowser = null, altCtx = null;
 async function altContext() {
   if (!altCtx) { altBrowser = await chromium.launch({ args: ['--disable-http2'] }); altCtx = await altBrowser.newContext({ locale: 'de-DE', timezoneId: 'Europe/Berlin', viewport: { width: 1366, height: 900 }, userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36' }); }
   return altCtx;
+}
+
+// Sondermodus „Weitere Arbeitgeber finden“: ONLY = discover:<Ort>|<km>
+if (ONLY.startsWith('discover:')) {
+  const [dOrt, dKm] = ONLY.slice(9).split('|');
+  const ctxD = await mkContext();
+  const known = Object.values(db.employers || {}).filter(e => !e.deleted).map(e => e.baName || e.name);
+  const queries = (profile.queries && profile.queries.length ? profile.queries : ['Projektleiter', 'Teamleiter']);
+  const res = await discoverEmployers({ context: ctxD, ort: dOrt || profile.ort || 'Schwelm', radius: parseInt(dKm, 10) || profile.radiusKm || 50, queries, known, ignored: settings.ignoredEmployers || [], log });
+  await store.write('vorschlaege.json', JSON.stringify(res));
+  log(`Vorschläge gespeichert: ${res.items.length} (von ${res.total} Arbeitgebern mit offenen Stellen)`);
+  await ctxD.close(); await browser.close(); process.exit(0);
 }
 
 const todo = employers.filter(e => !ONLY || e.id === ONLY);
@@ -99,7 +113,8 @@ for (const emp of todo) {
   // Unsichere Treffer (niedrige Erkennungssicherheit) werden nicht als Stellen übernommen – nur als Stichprobe im Quellen-Test gezeigt
   const discard = r.test.confidence === 'niedrig' && r.items.length > 0;
   if (discard) { r.test.discarded = r.items.length; r.items = []; }
-  sources[emp.id] = { ...r.test, count: r.items.length };
+  const pt = (prev.sources || {})[emp.id] || {};
+  sources[emp.id] = { ...r.test, count: r.items.length, tarifHint: pt.tarifHint, tarifChecked: pt.tarifChecked };
   if (failed) { // kurzzeitige Fehler dürfen die bisherigen Stellen nicht löschen
     for (const j of prev.jobs || []) if (j.employerId === emp.id) jobs.push({ ...j, stale: true });
     continue;
@@ -162,6 +177,25 @@ let nDesc = 0;
 for (const j of jobs) {
   if (nDesc >= 40) break;
   if (savedIds.has(j.id) && !j.description) { j.description = await fetchDescription(ctx, j.url); nDesc++; }
+}
+// ---- Tarifbindung: ausdrückliche Hinweise in den Stellenanzeigen (je Arbeitgeber höchstens 2 Anzeigen, alle 30 Tage) ----
+{
+  const manual = new Set(Object.values(db.employers || {}).filter(e => !e.deleted && e.tarif && e.tarif.name).map(e => e.id));
+  let nT = 0;
+  for (const emp of todo) {
+    const src = sources[emp.id]; if (!src || manual.has(emp.id) || emp.kind === 'portal') continue;
+    if (src.tarifChecked && (Date.parse(NOW) - Date.parse(src.tarifChecked)) < 30 * 864e5) continue;
+    const mine = jobs.filter(j => j.employerId === emp.id && j.url && !String(j.url).includes('#job-')).slice(0, 2);
+    if (!mine.length || nT >= 60) continue;
+    for (const j of mine) {
+      nT++;
+      const text = j.description || await fetchDescription(ctx, j.url);
+      const t = scanTarif(text);
+      if (t) { src.tarifHint = { name: t.name, eg: t.eg, gesichert: true, quelle: 'Stellenanzeige: „' + t.evidence + '“' }; break; }
+    }
+    src.tarifChecked = NOW;
+  }
+  log('Tarifhinweise geprüft:', nT, 'Anzeigen');
 }
 await ctx.close();
 await browser.close();

@@ -40,6 +40,12 @@ Unter **Arbeitgeber** zeigt jede Quelle eine Ampel: *sicher erkannt*, *unsicher*
 ## 7. Updates einspielen
 Neue ZIP-Version entpacken → im GitHub-Repository **Add file → Upload files** → Inhalt hineinziehen → *Commit*. Nach ca. 1 Minute erscheint in der App „Neue Version verfügbar“. Den Versionsverlauf findest du unter **Info**.
 
+## Gehalt, Tarif und weitere Arbeitgeber
+
+- **Gehalt:** An jeder Stelle steht eine *grobe Schätzung* (Marktspanne nach Stellenbezeichnung, Region, Tarifbindung, Unternehmensgröße). Das ist keine Angabe des Arbeitgebers. Abschalten unter Info → Einstellungen.
+- **Tarif:** Am Arbeitgeber lässt sich der Tarifvertrag eintragen (mit Quelle = „gesichert“). Zusätzlich liest der Abruf ausdrückliche Hinweise aus Stellenanzeigen („nach IG-Metall-Tarif“, „Entgeltgruppe 11“) und zeigt sie als Hinweis.
+- **Weitere Arbeitgeber finden:** Arbeitgeber → „Weitere Arbeitgeber finden“. Die App sucht über die Bundesagentur Firmen mit passenden offenen Stellen im Umkreis, zeigt Kurzbeschreibung und Größe und fragt vor dem Aufnehmen nach. Dauert 5–15 Minuten; eine Meldung oben sagt Bescheid.
+
 ## Gut zu wissen
 - **Stepstone, LinkedIn, Indeed, XING** bieten keine freie Schnittstelle. Die App öffnet dort die Suche mit deinen Begriffen und Umkreis. Automatisch abgerufen wird die **Jobbörse der Bundesagentur für Arbeit** sowie jede eingetragene Karriereseite.
 - Manche Karriereseiten blockieren automatische Abrufe oder sind ungewöhnlich gebaut. Das erkennt der Quellen-Test; solche Quellen erscheinen als *unsicher* oder *blockiert*, statt falsche Stellen zu zeigen.

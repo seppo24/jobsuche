@@ -2,6 +2,7 @@ import { h, fmtRel, daysBetween, debounce, lsGet, lsSet, uid, nowIso } from '../
 import { S, list, get, put, del, settings, setSettings } from '../store.js';
 import { norm, parseQuery, matchTitle, excludedBy, synonymsFromText } from '../search.js';
 import { toast, statusPill, emptyState, mount, input } from '../ui.js';
+import { estimateSalary } from '../salary.js';
 import { portals, searchUrl, canTrigger, triggerCrawl, watchForResult } from '../portals.js';
 import { openTailor } from './tailor.js';
 import { openApplicationForm } from './applications.js';
@@ -59,6 +60,9 @@ export function renderJobCard(r, rerender) {
   const { job: j, match: m, emp } = r;
   const saved = !!savedFor(j.id);
   const dist = j.distanceKm != null ? `${Math.round(j.distanceKm)} km` : null;
+  const tarif0 = emp && (emp.tarif && emp.tarif.name ? emp.tarif : S.jobs.sources?.[emp.id]?.tarifHint);
+  const tarif = tarif0 && tarif0.name !== 'Kein Tarifvertrag' ? tarif0 : null;
+  const sal = settings().showSalary === false ? null : estimateSalary(j, tarif ? { ...emp, tarif } : emp);
   return h('article', { class: 'job' + (saved ? ' saved' : '') },
     h('div', { class: 'ruler l-' + m.kind, 'aria-hidden': 'true' }),
     h('div', null,
@@ -67,6 +71,8 @@ export function renderJobCard(r, rerender) {
         h('span', null, j.employer || emp.name),
         j.location ? h('span', null, j.location + (dist ? ` · ${dist}` : '')) : (dist ? h('span', null, dist) : null),
         isNew(j) ? h('span', { class: 'chip new' }, 'neu') : null,
+        sal ? h('span', { class: 'chip', title: sal.basis }, sal.text + ' (Schätzung)') : null,
+        tarif ? h('span', { class: 'chip', title: (tarif.gesichert ? 'Gesichert: ' : 'Hinweis: ') + (tarif.quelle || '') }, 'Tarif: ' + tarif.name + (tarif.eg ? ' · EG ' + tarif.eg : '')) : null,
         j.foreign ? h('span', { class: 'chip' }, 'Ausland') : (!j.location ? h('span', { class: 'chip', title: 'Der Einsatzort ließ sich nicht erkennen – bitte in der Anzeige prüfen' }, 'Ort unbekannt') : null),
         m.kind !== 'alle' && m.kind !== 'exakt' ? h('span', { class: 'chip match', title: m.via ? `über „${m.via}“` : '' }, KIND_LABEL[m.kind] + (m.via ? `: ${m.via}` : '')) : null,
         j.stale ? h('span', { class: 'chip', title: 'Beim letzten Abruf nicht erreichbar – Stand von früher' }, 'älterer Stand') : null,

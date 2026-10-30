@@ -8,6 +8,8 @@ import { crawlEmployer } from '../lib/extract.mjs';
 import { crawlWorkday } from '../lib/adapters.mjs';
 import { evaluate } from '../lib/validate.mjs';
 import { fetchJobLocation } from '../lib/extract.mjs';
+import { scanTarif } from '../lib/tarif.mjs';
+import { employeesFrom, sizeLabel, collectEmployers, homepageFor } from '../lib/discover.mjs';
 import { distanceFor, lookupBuiltin, isForeign } from '../lib/geo.mjs';
 
 const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
@@ -100,9 +102,32 @@ expect('„Hybrid | Köln / Hagen (DE)“ → nächster', (await distanceFor('Hy
 expect('„Remote“ allein → unbekannt', (await distanceFor('Remote', home, {}, { online: false })) === null);
 expect('Ausland erkannt', isForeign('Veghel, Netherlands') && !isForeign('Köln, Germany') && !isForeign('Hagen'));
 expect('Mehrere Orte → nächster', (await distanceFor('Hamburg / Hagen', home, {}, { online: false })) < 20);
+;{ const a = scanTarif('Wir zahlen nach dem Tarifvertrag der Metall- und Elektroindustrie NRW, Entgeltgruppe 11.'); expect('Tarif: IG Metall + EG 11', a && /IG Metall/.test(a.name) && a.eg === '11', JSON.stringify(a)); expect('Tarif: nichts erwähnt → null', scanTarif('Attraktive Vergütung und 30 Tage Urlaub') === null); }
 { const d = await distanceFor('BSH 89407 Dillingen an der Donau DE', home, {}, { online: false }); expect('PLZ-Notnagel: 89407 Dillingen ≈ 375 km Luftlinie (nicht im Umkreis)', d > 330 && d < 420, d + ' km'); }
 expect('Unbekannter Ort offline → leer', (await distanceFor('Kleindorfhausen', home, {}, { online: false })) === null);
 
+
+// ---- Arbeitgebersuche (BA-Schnittstelle als Attrappe) ----
+{
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (u) => {
+    u = String(u);
+    const J = o => ({ ok: true, status: 200, json: async () => o, text: async () => JSON.stringify(o) });
+    if (u.includes('/jobdetails/')) return J({ titel: 'x', externeUrl: 'https://www.stepstone.de/job/1', arbeitgeberHomepage: 'https://www.muster-technik.de/karriere/abc' });
+    if (u.includes('/jobs?')) return J({ stellenangebote: [
+      { refnr: 'A1', titel: 'Projektleiter Anlagenbau', arbeitgeber: 'Muster Technik GmbH', arbeitsort: { ort: 'Hagen', entfernung: '9' } },
+      { refnr: 'A2', titel: 'Teamleiter Montage', arbeitgeber: 'Muster Technik GmbH', arbeitsort: { ort: 'Gevelsberg', entfernung: '3' } },
+      { refnr: 'B1', titel: 'Projektleiter', arbeitgeber: 'Randstad Deutschland GmbH & Co. KG', arbeitsort: { ort: 'Essen' } },
+      { refnr: 'C1', titel: 'Konstrukteur', arbeitgeber: 'Zweite AG', arbeitsort: { ort: 'Witten', entfernung: '12' } } ] });
+    return realFetch(u);
+  };
+  const c = await collectEmployers({ ort: 'Schwelm', radius: 50, queries: ['Projektleiter'], maxPages: 1 });
+  expect('Arbeitgeber gesammelt und nach Stellenzahl sortiert', c.length === 3 && c[0].name.startsWith('Muster') && c[0].count === 2 && c[0].minKm === 3, c.map(x => x.name + ':' + x.count).join(', '));
+  expect('Personaldienstleister erkannt', c.find(x => /Randstad/.test(x.name)).agency === true);
+  expect('Homepage aus BA-Detail (Stepstone wird ignoriert)', (await homepageFor('A1')) === 'https://www.muster-technik.de');
+  globalThis.fetch = realFetch;
+  expect('Größe aus Text', employeesFrom('Wir sind über 1.200 Mitarbeitende an 5 Standorten') === 1200 && sizeLabel(1200) === 'großes Unternehmen' && employeesFrom('Kein Hinweis') === null);
+}
 await browser.close(); server.close();
 console.log(fails ? `\n${fails} Prüfung(en) fehlgeschlagen` : '\nAlle Prüfungen bestanden');
 process.exit(fails ? 1 : 0);

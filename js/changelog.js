@@ -1,9 +1,20 @@
 // Versionsverlauf – wird in der App unter „Info“ angezeigt.
 // Bei jeder Änderung: neuen Eintrag OBEN einfügen, VERSION erhöhen und in sw.js die CACHE-Version anpassen.
 
-export const VERSION = '1.0.15';
+export const VERSION = '1.0.16';
 
 export const CHANGELOG = [
+  {
+    version: '1.0.16',
+    date: '2026-10-30',
+    title: 'Gehaltsschätzung, Tarif, weitere Arbeitgeber finden',
+    items: [
+      'Jede Stelle zeigt eine grobe Gehaltsschätzung (Marktspanne nach Stellenbezeichnung, Region, Tarif, Größe). Abschaltbar unter Info → Einstellungen.',
+      'Tarifvertrag je Arbeitgeber (mit Quelle = „gesichert“, optional Entgeltgruppe) und Hinweise aus Stellenanzeigen („nach IG-Metall-Tarif“, „Entgeltgruppe 11“). Anzeige an den Stellen.',
+      'Arbeitgeber → „Weitere Arbeitgeber finden“: Suche über die Bundesagentur nach Firmen mit passenden offenen Stellen im Umkreis eines Ortes, mit Kurzbeschreibung, Größe und Rückfrage vor dem Aufnehmen. Personaldienstleister werden ausgelassen.',
+      'Arbeitgeber haben zusätzlich Felder „Mitarbeitende“ und „Beschreibung“.',
+    ],
+  },
   {
     version: '1.0.15',
     date: '2026-10-30',

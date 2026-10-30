@@ -70,7 +70,7 @@ function searchSection() {
   const syn = textarea({ rows: 10, value: s.synonymsText });
   const st = textarea({ rows: 3, value: (s.excludeStudent || []).join(', ') });
   const df = textarea({ rows: 3, value: (s.excludeDefence || []).join(', ') });
-  const hs = h('input', { type: 'checkbox', checked: s.hide.student }), hd = h('input', { type: 'checkbox', checked: s.hide.defence }), hb = h('input', { type: 'checkbox', checked: s.hide.branche });
+  const hs = h('input', { type: 'checkbox', checked: s.hide.student }), hd = h('input', { type: 'checkbox', checked: s.hide.defence }), hb = h('input', { type: 'checkbox', checked: s.hide.branche }), sal = h('input', { type: 'checkbox', checked: s.showSalary !== false });
   const br = input({ value: (s.hide.branchen || []).join(', ') });
   return sect('Ähnliche Titel & Ausblenden',
     h('p', { class: 'muted small' }, 'Eine Gruppe pro Zeile: „Name: Begriff, Begriff | verwandter Begriff“. Begriffe vor dem „|“ gelten als gleichwertig (z. B. Projektleiter = Projektmanager), dahinter stehende werden als verwandt schwächer gewertet.'),
@@ -80,9 +80,10 @@ function searchSection() {
     h('p', { class: 'muted small' }, 'Die Schalter dazu findest du direkt in der Stellensuche. Hier legst du fest, welche Begriffe gelten und ob sie voreingestellt aktiv sind.'),
     h('label', { class: 'check' }, hs, 'Ausbildung, Studium, Praktikum ausblenden'), field('Begriffe', st),
     h('label', { class: 'check' }, hd, 'Rüstung/Verteidigung ausblenden'), field('Begriffe', df),
+    h('label', { class: 'check' }, sal, 'Gehaltsschätzung an den Stellen anzeigen (grobe Marktspanne, keine Angabe des Arbeitgebers)'),
     h('label', { class: 'check' }, hb, 'Bestimmte Branchen ausblenden'), field('Branchen (Markierung am Arbeitgeber)', br, 'Z. B. Automotive.'),
     h('div', { class: 'btn-row' }, h('button', { class: 'btn primary', type: 'button', onclick: () => {
-      setSettings({ synonymsText: syn.value, excludeStudent: lines(st.value), excludeDefence: lines(df.value), hide: { student: hs.checked, defence: hd.checked, branche: hb.checked, branchen: lines(br.value) } });
+      setSettings({ showSalary: sal.checked, synonymsText: syn.value, excludeStudent: lines(st.value), excludeDefence: lines(df.value), hide: { student: hs.checked, defence: hd.checked, branche: hb.checked, branchen: lines(br.value) } });
       toast('Gespeichert', 'ok');
     } }, 'Speichern'), h('button', { class: 'btn', type: 'button', onclick: () => { st.value = DEFAULT_EXCLUDE_STUDENT.join(', '); df.value = DEFAULT_EXCLUDE_DEFENCE.join(', '); } }, 'Begriffe zurücksetzen')));
 }

@@ -1,6 +1,8 @@
 import { h, uid, fmtRel, hostOf, normUrl, debounce, lsGet, lsSet } from '../util.js';
 import { S, list, get, put, del, settings } from '../store.js';
 import { sheet, toast, confirmDialog, field, input, textarea, select, statusPill, emptyState, mount } from '../ui.js';
+import { TARIFE } from '../salary.js';
+import { openDiscover } from './discover.js';
 import { PORTAL_TYPES, canTrigger, triggerCrawl, searchUrl, watchForResult, isWatching } from '../portals.js';
 
 const rawTest = id => S.jobs.sources?.[id]?.test || S.jobs.sources?.[id] || null;
@@ -41,6 +43,8 @@ export function openEmployer(id, after = () => {}) {
     const k = { name: input({ value: e.name || '' }), url: input({ type: 'url', value: e.url || '', placeholder: 'https://karriere.firma.de' }),
       kind: select([['arbeitgeber', 'Arbeitgeber (Karriereseite)'], ['dienstleister', 'Personaldienstleister / Ingenieurbüro'], ['portal', 'Jobportal']], e.kind),
       portalType: select(PORTAL_TYPES, e.portalType || 'link'), searchUrl: input({ value: e.searchUrl || '', placeholder: 'https://portal.de/suche?was={q}&wo={ort}&umkreis={radius}' }),
+      tarifName: select(TARIFE.map(t => [t, t || '– unbekannt –']), e.tarif?.name || ''), tarifEg: input({ value: e.tarif?.eg || '', placeholder: 'z. B. 11' }), tarifSrc: input({ value: e.tarif?.quelle || '', placeholder: 'Woher weißt du das? (Link, Stellenanzeige …)' }),
+      size: input({ value: e.employees || '', placeholder: 'Mitarbeitende, z. B. 1200' }), desc: textarea({ rows: 2, value: e.description || '' }),
       branche: input({ value: e.branche || '', placeholder: 'z. B. Automotive' }), note: textarea({ rows: 2, value: e.note || '' }) };
     const crawl = h('input', { type: 'checkbox', checked: e.crawl !== false });
     const baSearch = h('input', { type: 'checkbox', checked: !!e.baSearch });
@@ -64,13 +68,18 @@ export function openEmployer(id, after = () => {}) {
       const url = normUrl(k.url.value);
       if (!k.name.value.trim() || !url) { toast('Name und Adresse sind Pflicht.', 'bad'); return; }
       const urlChanged = ex && url !== e.url;
-      put('employers', { ...e, name: k.name.value.trim(), url, kind: k.kind.value, portalType: k.kind.value === 'portal' ? k.portalType.value : undefined, searchUrl: k.searchUrl.value.trim() || undefined, branche: k.branche.value.trim(), note: k.note.value.trim(), crawl: crawl.checked, baSearch: baSearch.checked || undefined, baName: baName.value.trim() || undefined,
+      put('employers', { ...e, name: k.name.value.trim(), url, kind: k.kind.value, portalType: k.kind.value === 'portal' ? k.portalType.value : undefined, searchUrl: k.searchUrl.value.trim() || undefined, branche: k.branche.value.trim(), note: k.note.value.trim(),
+        tarif: k.tarifName.value ? { name: k.tarifName.value, eg: k.tarifEg.value.trim() || undefined, quelle: k.tarifSrc.value.trim() || undefined, gesichert: !!k.tarifSrc.value.trim() } : null,
+        employees: parseInt(String(k.size.value).replace(/\D/g, ''), 10) || undefined, description: k.desc.value.trim() || undefined, crawl: crawl.checked, baSearch: baSearch.checked || undefined, baName: baName.value.trim() || undefined,
         ...(urlChanged ? { oldUrl: e.url, urlStatus: 'von dir geändert', confirmedAt: undefined } : {}) });
       toast('Gespeichert', 'ok'); close(); after();
     } },
       field('Name', k.name), field('Adresse der Karriereseite', k.url), field('Art', k.kind),
       portalRow,
       field('Branche (Markierung)', k.branche, 'Branchen aus Info → Einstellungen → „Ausblenden“ werden in der Stellensuche ausgeblendet.'),
+      field('Tarifvertrag', k.tarifName, 'Wird in den Stellen angezeigt. „Gesichert“ gilt, wenn du eine Quelle einträgst. Ohne Eintrag zeigt die App Hinweise aus den Stellenanzeigen.'),
+      field('Entgeltgruppe (optional)', k.tarifEg), field('Quelle des Tarifs', k.tarifSrc),
+      field('Mitarbeitende (ungefähr)', k.size, 'Fließt in die Gehaltsschätzung ein (Konzern/Kleinbetrieb).'), field('Beschreibung', k.desc),
       field('Notiz', k.note), h('label', { class: 'check' }, crawl, 'Stellen automatisch abrufen'),
       h('div', null, h('label', { class: 'check' }, baSearch, 'Stellen über die Bundesagentur für Arbeit suchen (statt Karriereseite)'), h('p', { class: 'muted small' }, 'Für Firmen, deren Karriereseite den Abruf sperrt. Es erscheinen nur Stellen, die die Firma auch bei der Bundesagentur eingetragen hat.'), field('Firmenname bei der Bundesagentur (optional)', baName)),
       h('div', { class: 'btn-row' }, h('button', { class: 'btn primary', type: 'submit' }, 'Speichern'), ex ? h('button', { class: 'btn danger', type: 'button', onclick: async () => { if (await confirmDialog(`„${e.name}“ aus der Liste entfernen?`)) { del('employers', e.id); close(); after(); } } }, 'Entfernen') : null)));
@@ -100,7 +109,7 @@ export function render(el) {
   qIn.addEventListener('input', debounce(() => { f.q = qIn.value; lsSet('jobsuche.empview', f); draw(); }, 150));
   const tests = all.map(e => testOf(e.id)).filter(Boolean);
   mount(el,
-    h('div', { class: 'row' }, h('h1', { class: 'grow', style: 'margin:0' }, 'Arbeitgeber'), h('button', { class: 'btn primary', type: 'button', onclick: () => openEmployer(null, () => render(el)) }, '+ Hinzufügen')),
+    h('div', { class: 'row' }, h('h1', { class: 'grow', style: 'margin:0' }, 'Arbeitgeber'), h('button', { class: 'btn', type: 'button', onclick: () => openDiscover(() => render(el)) }, 'Weitere Arbeitgeber finden'), h('button', { class: 'btn primary', type: 'button', onclick: () => openEmployer(null, () => render(el)) }, '+ Hinzufügen')),
     h('p', { class: 'muted' }, `${all.filter(e => e.kind !== 'portal').length} Arbeitgeber, ${all.filter(e => e.kind === 'portal').length} Portale` + (tests.length ? ` · ${tests.filter(t => t.status === 'ok').length} sicher erkannt, ${tests.filter(t => ['unsicher', 'fehler', 'blockiert'].includes(t.status)).length} zu prüfen` : '')),
     h('div', { class: 'filters' }, seg), h('div', { class: 'field' }, qIn), box);
   draw();
