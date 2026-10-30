@@ -5,7 +5,7 @@ import { sheet, toast, confirmDialog, field, input, textarea, mount } from '../u
 import { synonymsFromText, synonymsToText, DEFAULT_SYNONYMS, DEFAULT_EXCLUDE_STUDENT, DEFAULT_EXCLUDE_DEFENCE } from '../search.js';
 import * as dbx from '../dropbox.js';
 import { aiKey, setAiKey } from './tailor.js';
-import { ghToken, setGhToken, canTrigger, triggerCrawl } from '../portals.js';
+import { ghToken, setGhToken, canTrigger, triggerCrawl, watchForResult } from '../portals.js';
 import { inst, isStandalone, browserInfo, runInstall } from '../install.js';
 import { parseEmployerSheet, planEmployerImport, parseStatusSheet, matchEmployer } from '../importers.js';
 
@@ -94,7 +94,7 @@ function crawlerSection() {
     h('p', { class: 'muted small' }, 'Der Abruf läuft täglich automatisch in GitHub. Mit Konto, Repository und Token kannst du ihn zusätzlich per Knopfdruck aus der App starten. Das Token bleibt nur auf diesem Gerät.'),
     h('div', { class: 'grid2' }, field('GitHub-Benutzer', o), field('Repository', r)), field('Zugriffstoken', t, 'Berechtigung nur für dieses Repository: „Actions: Read and write“.'),
     h('div', { class: 'btn-row' }, h('button', { class: 'btn primary', type: 'button', onclick: () => { setSettings({ github: { owner: o.value.trim(), repo: r.value.trim() } }); setGhToken(t.value); toast('Gespeichert', 'ok'); } }, 'Speichern'),
-      h('button', { class: 'btn', type: 'button', onclick: async ev => { setSettings({ github: { owner: o.value.trim(), repo: r.value.trim() } }); setGhToken(t.value); ev.target.disabled = true; try { await triggerCrawl(''); toast('Abruf gestartet. In 3–10 Minuten hier „Jetzt abgleichen“ drücken.', 'ok'); } catch (e) { toast(e.message, 'bad'); } ev.target.disabled = false; } }, 'Abruf jetzt starten'),
+      h('button', { class: 'btn', type: 'button', onclick: async ev => { setSettings({ github: { owner: o.value.trim(), repo: r.value.trim() } }); setGhToken(t.value); ev.target.disabled = true; try { await triggerCrawl(''); watchForResult(() => {}); toast('Abruf gestartet – dauert 3–10 Minuten. Oben erscheint eine Meldung, sobald er fertig ist.', 'ok'); } catch (e) { toast(e.message, 'bad'); } ev.target.disabled = false; } }, 'Abruf jetzt starten'),
       o.value && r.value ? h('a', { class: 'btn', href: `https://github.com/${g.owner}/${g.repo}/actions`, target: '_blank', rel: 'noopener noreferrer' }, 'Protokoll in GitHub') : null));
 }
 

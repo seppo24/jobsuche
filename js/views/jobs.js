@@ -2,7 +2,7 @@ import { h, fmtRel, daysBetween, debounce, lsGet, lsSet, uid, nowIso } from '../
 import { S, list, get, put, del, settings, setSettings } from '../store.js';
 import { norm, parseQuery, matchTitle, excludedBy, synonymsFromText } from '../search.js';
 import { toast, statusPill, emptyState, mount, input } from '../ui.js';
-import { portals, searchUrl, canTrigger, triggerCrawl } from '../portals.js';
+import { portals, searchUrl, canTrigger, triggerCrawl, watchForResult } from '../portals.js';
 import { openTailor } from './tailor.js';
 import { openApplicationForm } from './applications.js';
 
@@ -105,7 +105,7 @@ export function render(el, params = {}) {
     const shown = st.saved ? rows.filter(r => savedFor(r.job.id)) : rows;
     mount(info,
       !fresh ? h('div', { class: 'banner info' }, 'Es liegen noch keine abgerufenen Stellen vor. ', h('span', null, 'Sobald der automatische Abruf (GitHub Actions) einmal gelaufen ist, erscheinen sie hier. Bis dahin helfen die Portal-Suchlinks unten.')) : null,
-      fresh ? h('p', { class: 'muted small' }, `${shown.length} Treffer von ${total} Stellen · Stand ${fmtRel(fresh)}`, st.emp && canTrigger() ? [' · ', h('button', { class: 'btn ghost small', type: 'button', onclick: async e => { e.target.disabled = true; try { await triggerCrawl(st.emp); toast('Abruf gestartet – dauert ca. 1–3 Minuten, dann „Info → Abgleichen“.', 'ok'); } catch (x) { toast(x.message, 'bad'); } e.target.disabled = false; } }, 'Diesen Arbeitgeber jetzt neu abrufen')] : null) : null,
+      fresh ? h('p', { class: 'muted small' }, `${shown.length} Treffer von ${total} Stellen · Stand ${fmtRel(fresh)}`, st.emp && canTrigger() ? [' · ', h('button', { class: 'btn ghost small', type: 'button', onclick: async e => { e.target.disabled = true; try { await triggerCrawl(st.emp); watchForResult(() => { try { draw(); } catch { /* Ansicht gewechselt */ } }); toast('Abruf gestartet – dauert ca. 1–3 Minuten. Oben erscheint eine Meldung, sobald er fertig ist.', 'ok'); } catch (x) { toast(x.message, 'bad'); } e.target.disabled = false; } }, 'Diesen Arbeitgeber jetzt neu abrufen')] : null) : null,
       null);
     const part = shown.slice(0, st.limit);
     mount(listBox,

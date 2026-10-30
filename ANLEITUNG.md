@@ -9,7 +9,7 @@ Die App besteht aus drei Teilen:
 ## 1. Auf GitHub hochladen
 1. Auf github.com anmelden → **New repository** → Name z. B. `jobsuche` → **Public** → *Create repository*.
 2. **Add file → Upload files** → den **Inhalt** der ZIP-Datei hineinziehen (nicht den Ordner selbst) → *Commit changes*.
-3. Prüfen, dass der Ordner `.github/workflows` mit der Datei `crawl.yml` angekommen ist. Falls nicht (versteckte Ordner werden manchmal übersprungen): **Add file → Create new file**, als Name `.github/workflows/crawl.yml` eintippen und den Inhalt der Datei aus der ZIP einfügen.
+3. **Nur beim allerersten Mal:** Prüfen, dass `.github/workflows/crawl.yml` angekommen ist (versteckte Ordner werden beim Hochladen oft übersprungen). Falls nicht: **Add file → Create new file**, als Name `.github/workflows/crawl.yml` eintippen und den Inhalt der Datei aus der ZIP einfügen. Bei späteren Updates entfällt dieser Schritt – die Datei bleibt in GitHub bestehen und wird beim Hochladen nicht gelöscht. Nur wenn im Versionsverlauf ausdrücklich „crawl.yml geändert“ steht, muss sie erneut ersetzt werden.
 4. **Settings → Pages** → *Source*: **Deploy from a branch** → Branch `main`, Ordner `/ (root)` → *Save*. Nach ca. 1 Minute steht oben die Adresse, z. B. `https://DEINNAME.github.io/jobsuche/`.
 
 ## 2. Dropbox-App anlegen (nur wenn du keinen vorhandenen App-Key nutzen willst)

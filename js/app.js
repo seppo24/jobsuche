@@ -1,8 +1,8 @@
 import { h, fmtRel } from './util.js';
 import { S, on, list, seedEmployers, loadCachedJobs, pull } from './store.js';
 import * as dbx from './dropbox.js';
-import { seedPortals } from './portals.js';
-import { toast } from './ui.js';
+import { seedPortals, resumeWatch } from './portals.js';
+import { toast, showPendingNotice } from './ui.js';
 import './install.js';
 import { VERSION } from './changelog.js';
 import { followUpState } from './views/applications.js';
@@ -60,6 +60,8 @@ on(kind => {
   else if (kind === 'db') updateBadge();
 });
 window.addEventListener('hashchange', route);
+showPendingNotice();
+resumeWatch();
 
 async function start() {
   document.body.appendChild(shell);

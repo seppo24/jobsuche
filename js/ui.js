@@ -1,6 +1,23 @@
 // Gemeinsame Oberflächen-Bausteine.
 import { h, clear } from './util.js';
 
+const NK = 'jobsuche.notice';
+/** Meldung oben im Banner; bleibt (auch nach Neuladen), bis sie mit „OK“ bestätigt wird. */
+export function notice(msg, kind = 'ok') {
+  try { localStorage.setItem(NK, JSON.stringify({ msg, kind })); } catch { /* ohne Speicher */ }
+  showNotice(msg, kind);
+}
+export function showPendingNotice() {
+  try { const n = JSON.parse(localStorage.getItem(NK) || 'null'); if (n) showNotice(n.msg, n.kind); } catch { /* ignorieren */ }
+}
+function showNotice(msg, kind) {
+  document.getElementById('notice')?.remove();
+  const bar = h('div', { id: 'notice', class: 'notice ' + kind, role: 'alert' },
+    h('span', { class: 'notice-text' }, msg),
+    h('button', { class: 'btn small primary', type: 'button', onclick: () => { try { localStorage.removeItem(NK); } catch { /* egal */ } bar.remove(); } }, 'OK'));
+  document.body.appendChild(bar);
+}
+
 let toastTimer;
 export function toast(msg, kind = '') {
   let t = document.getElementById('toast');

@@ -2,6 +2,7 @@
 import { lsGet, lsSet } from './util.js';
 import { S, put, settings, flush, pullJobs } from './store.js';
 import * as dbx from './dropbox.js';
+import { notice } from './ui.js';
 
 const slug = s => String(s || '').toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const nearest = (v, steps) => steps.reduce((a, b) => (Math.abs(b - v) < Math.abs(a - v) ? b : a));
@@ -63,17 +64,30 @@ export async function triggerCrawl(only = '') {
 }
 
 // ---- Auf das Ergebnis eines gestarteten Abrufs warten (jobs.json in der Dropbox wird neu geschrieben) ----
+// Der Lauf wird gemerkt, damit die Überwachung auch nach einem Neuladen der App weitergeht.
+const RK = 'jobsuche.run';
 let watching = false;
 export const isWatching = () => watching;
-export function watchForResult(onDone, { everyMs = 20000, maxMs = 15 * 60000 } = {}) {
+export function watchForResult(onDone, { everyMs = 20000, maxMs = 15 * 60000, resume = null } = {}) {
   if (watching) return;
   watching = true;
-  const before = S.jobs.generatedAt, t0 = Date.now();
+  const before = resume ? resume.before : S.jobs.generatedAt, t0 = resume ? resume.t0 : Date.now();
+  try { localStorage.setItem(RK, JSON.stringify({ before, t0 })); } catch { /* ohne Speicher */ }
+  const finish = ok => {
+    watching = false;
+    try { localStorage.removeItem(RK); } catch { /* egal */ }
+    notice(ok ? 'Der Abruf ist abgeschlossen. Die neuen Stellen sind geladen.' : 'Der Abruf hat nach 15 Minuten kein Ergebnis geliefert. Bitte in GitHub unter „Actions“ nachsehen.', ok ? 'ok' : 'bad');
+    onDone && onDone(ok);
+  };
   const tick = async () => {
     try { await pullJobs(); } catch { /* nächster Versuch */ }
-    if (S.jobs.generatedAt !== before) { watching = false; onDone(true); return; }
-    if (Date.now() - t0 > maxMs) { watching = false; onDone(false); return; }
+    if (S.jobs.generatedAt !== before) { finish(true); return; }
+    if (Date.now() - t0 > maxMs) { finish(false); return; }
     setTimeout(tick, everyMs);
   };
   setTimeout(tick, everyMs);
+}
+/** Beim Start: einen noch laufenden Abruf weiter beobachten. */
+export function resumeWatch() {
+  try { const r = JSON.parse(localStorage.getItem(RK) || 'null'); if (r && Date.now() - r.t0 < 15 * 60000) watchForResult(null, { resume: r }); else if (r) localStorage.removeItem(RK); } catch { /* ignorieren */ }
 }

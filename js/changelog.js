@@ -1,9 +1,17 @@
 // Versionsverlauf – wird in der App unter „Info“ angezeigt.
 // Bei jeder Änderung: neuen Eintrag OBEN einfügen, VERSION erhöhen und in sw.js die CACHE-Version anpassen.
 
-export const VERSION = '1.0.12';
+export const VERSION = '1.0.13';
 
 export const CHANGELOG = [
+  {
+    version: '1.0.13',
+    date: '2026-10-30',
+    title: 'Meldung, wenn der Abruf fertig ist',
+    items: [
+      'Nach „Abruf jetzt starten“, „Test starten“ oder „Diesen Arbeitgeber neu abrufen“ erscheint oben ein Banner, sobald der Abruf abgeschlossen ist. Es bleibt, bis du „OK“ drückst – auch nach einem Neuladen der App.',
+    ],
+  },
   {
     version: '1.0.12',
     date: '2026-10-30',

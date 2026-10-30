@@ -179,3 +179,7 @@ code, .mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; f
 .steps li { counter-increment: s; position: relative; padding: .25rem 0 .6rem 2.2rem; }
 .steps li::before { content: counter(s); position: absolute; left: 0; top: .15rem; width: 1.55rem; height: 1.55rem; border-radius: 50%; background: var(--cobalt-soft); color: var(--cobalt); font-weight: 700; text-align: center; font-size: .85rem; line-height: 1.55rem; }
 .brand svg { stroke: var(--cobalt); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.notice { position: fixed; top: 0; left: 0; right: 0; z-index: 200; display: flex; gap: .75rem; align-items: center; justify-content: space-between; padding: .7rem 1rem; padding-top: calc(.7rem + env(safe-area-inset-top, 0px)); background: var(--ok-soft, #e3f4e8); color: var(--ink); border-bottom: 2px solid var(--ok, #2f8f4e); font-size: .95rem; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+.notice.bad { background: var(--bad-soft); border-bottom-color: var(--bad); }
+.notice-text { flex: 1; }
