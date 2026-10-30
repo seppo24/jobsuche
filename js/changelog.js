@@ -1,15 +1,23 @@
 // Versionsverlauf – wird in der App unter „Info“ angezeigt.
 // Bei jeder Änderung: neuen Eintrag OBEN einfügen, VERSION erhöhen und in sw.js die CACHE-Version anpassen.
 
-export const VERSION = '1.0.23';
+export const VERSION = '1.0.24';
 
 export const CHANGELOG = [
+  {
+    version: '1.0.24',
+    date: '2026-10-30',
+    title: 'Korrektur: App startet wieder',
+    items: [
+      'Behebt einen Fehler in Version 1.0.23, durch den die App nur eine weiße Seite zeigte.',
+    ],
+  },
   {
     version: '1.0.23',
     date: '2026-10-30',
     title: 'Zeugnis-Bewertung robuster',
     items: [
-      'Die KI-Antwort wird auch gelesen, wenn sie wegen der Länge abgeschnitten ankommt (Fehler „Expected ',' or ']' …“). Die Antwort darf länger sein und wird kürzer gehalten.',
+      'Die KI-Antwort wird auch gelesen, wenn sie wegen der Länge abgeschnitten ankommt (Fehler „Expected … after array element“). Die Antwort darf länger sein und wird kürzer gehalten.',
       'Bei einem Fehler steht jetzt der wahre Grund da und nicht mehr „KI-Zugang hinterlegen“.',
     ],
   },
