@@ -33,8 +33,27 @@ export function lookupBuiltin(location) {
 }
 
 /** Ortstext säubern: Ländercodes, Klammern, „Hybrid/Remote“, mehrere Orte → Liste möglicher Orte. */
-const FOREIGN = /\b(netherlands|niederlande|nederland|belgium|belgien|belgie|luxembourg|luxemburg|france|frankreich|italy|italien|spain|spanien|portugal|poland|polen|czech|tschechien|slovakia|slowakei|hungary|ungarn|romania|rum[aä]nien|bulgaria|bulgarien|serbia|serbien|croatia|kroatien|slovenia|slowenien|austria|[oö]sterreich|switzerland|schweiz|denmark|d[aä]nemark|sweden|schweden|norway|norwegen|finland|finnland|ireland|irland|united kingdom|great britain|england|scotland|uk|usa|united states|u\.s\.a|canada|kanada|mexico|mexiko|brazil|brasilien|argentina|argentinien|china|india|indien|japan|korea|singapore|singapur|thailand|vietnam|malaysia|indonesia|indonesien|turkey|t[uü]rkei|t[uü]rkiye|israel|egypt|[aä]gypten|south africa|s[uü]dafrika|australia|australien|uae|emirates|saudi|morocco|marokko|tunisia|tunesien|russia|russland|ukraine|greece|griechenland|estonia|estland|latvia|lettland|lithuania|litauen|philippines|philippinen|taiwan)\b/i;
-export const isForeign = loc => FOREIGN.test(String(loc || '')) && !/\b(deutschland|germany)\b/i.test(String(loc || ''));
+const FOREIGN = /\b(netherlands|niederlande|nederland|belgium|belgien|belgie|luxembourg|luxemburg|france|frankreich|italy|italien|spain|spanien|portugal|poland|polen|czech|tschechien|slovakia|slowakei|hungary|ungarn|romania|rum[aä]nien|bulgaria|bulgarien|serbia|serbien|croatia|kroatien|slovenia|slowenien|austria|[oö]sterreich|switzerland|schweiz|denmark|d[aä]nemark|sweden|schweden|norway|norwegen|finland|finnland|ireland|irland|united kingdom|great britain|england|scotland|uk|usa|united states|u\.s\.a|canada|kanada|mexico|mexiko|brazil|brasilien|argentina|argentinien|china|india|indien|japan|korea|singapore|singapur|thailand|vietnam|malaysia|indonesia|indonesien|turkey|t[uü]rkei|t[uü]rkiye|israel|egypt|[aä]gypten|south africa|s[uü]dafrika|australia|australien|uae|emirates|saudi|morocco|marokko|tunisia|tunesien|russia|russland|ukraine|greece|griechenland|estonia|estland|latvia|lettland|lithuania|litauen|philippines|philippinen|taiwan|vereinigte staaten|amerika|vereinigtes k[oö]nigreich|gro[sß]britannien|polska|nederlande|[oö]sterr\.)\b/i;
+const FOREIGN_CODE = /(?:^|[,;\s(])(AT|CH|NL|BE|FR|ES|PL|CZ|US|GB|HU|RO|SK|SI|DK|CN|MX|TR|BR|JP|KR|LU|PT|FI|IE|IL|ZA|AU)(?=$|[,;\s)\d])/;
+export const isForeign = loc => (FOREIGN.test(String(loc || '')) || FOREIGN_CODE.test(String(loc || ''))) && !/\b(deutschland|germany)\b/i.test(String(loc || ''));
+
+// ---- Ortsverzeichnis (GeoNames), vom Abruf geladen ----
+import { normName } from './gazetteer.mjs';
+let GAZ = null;
+export const setGazetteer = g => { GAZ = g; };
+function gazPlz(text) { const m = String(text || '').match(/(?:^|\D)(\d{5})(?!\d)/); const e = m && GAZ && GAZ.byPlz.get(m[1]); return e ? [e[0], e[1]] : null; }
+function gazName(text, strict = false) {
+  if (!GAZ) return null;
+  const toks = normName(text.replace(/\b\d{4,5}\b/g, ' ')).split(' ').filter(Boolean);
+  for (let n = toks.length; n >= 1; n--) {
+    if (strict && n !== toks.length) break;
+    const hit = GAZ.byName.get(toks.slice(0, n).join(' ')); if (hit) return hit;
+    if (n === toks.length && toks.length > 4) break;
+  }
+  return null;
+}
+/** Ist das ein bekannter Ort? (Ortsliste oder Ortsverzeichnis). strict: der ganze Text muss der Ortsname sein. */
+export function knownPlace(text, strict = false) { return !!(lookupBuiltin(text) || gazPlz(text) && /\d{5}/.test(text) || gazName(String(text || ''), strict)); }
 
 export function cleanLocation(loc) {
   return String(loc || '').replace(/\(.*?\)/g, ' ').replace(/\b(hybrid|remote|homeoffice|home office|mobil|vor ort|on-?site|deutschlandweit|bundesweit)\b/gi, ' ')
@@ -53,6 +72,7 @@ export async function distanceFor(location, home, cache, opts = {}) {
 async function distanceCore(location, home, cache, { fetchImpl = fetch, online = true } = {}) {
   if (!location) return null;
   const parts = cleanLocation(location);
+  if (isForeign(location) && parts.length <= 1) return null; // Ausland: nie mit gleichnamigen deutschen Orten verwechseln
   if (parts.length > 1 || (parts[0] && parts[0] !== String(location).trim())) {
     // jeden Teilort einzeln bewerten, der nächste zählt
     let best = null;
@@ -60,8 +80,11 @@ async function distanceCore(location, home, cache, { fetchImpl = fetch, online =
     if (best != null) return best;
   }
   const h = [home.lat, home.lon];
+  if (isForeign(location)) return null;
+  const pz = gazPlz(location); if (pz) return haversine(h, pz);
   const hits = lookupBuiltin(location);
   if (hits) return Math.min(...hits.map(x => haversine(h, x.c)));
+  const gn = gazName(String(location)); if (gn) return Math.min(...gn.map(c => haversine(h, c)));
   const key = location.trim().toLowerCase().slice(0, 80);
   if (cache[key] === null) return null;
   if (cache[key]) return haversine(h, cache[key]);

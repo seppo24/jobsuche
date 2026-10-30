@@ -10,7 +10,8 @@ import { evaluate } from '../lib/validate.mjs';
 import { fetchJobLocation } from '../lib/extract.mjs';
 import { scanTarif } from '../lib/tarif.mjs';
 import { employeesFrom, sizeLabel, collectEmployers, homepageFor } from '../lib/discover.mjs';
-import { distanceFor, lookupBuiltin, isForeign } from '../lib/geo.mjs';
+import { distanceFor, lookupBuiltin, isForeign, knownPlace, setGazetteer } from '../lib/geo.mjs';
+import { unzipTxt, parseGazetteer } from '../lib/gazetteer.mjs';
 
 const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const wd = JSON.parse('{"total":45,"jobPostings":[]}');
@@ -30,7 +31,7 @@ const server = http.createServer((req, res) => {
     const rows = Array.from({ length: Math.max(0, Math.min(10, 25 - start)) }, (_, i) => `<tr class="data-row"><td><span class="jobTitle"><a href="/job/${start + i}/" class="jobTitle-link">${T[(start + i) % 5]} Nr. ${start + i} (m/w/d)</a></span></td><td><span class="jobLocation">Wuppertal, DE</span></td></tr>`).join('');
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(`<!doctype html><html><head><meta charset="utf-8"><title>Suche</title></head><body><h1>Stellenangebote</h1><span class="paginationLabel">Ergebnisse ${start + 1} – ${Math.min(start + 10, 25)} von 25</span><table><tbody>${rows}</tbody></table></body></html>`); return;
   }
-  const map = { '/': 'home.html', '/sf': 'sf1.html', '/sf2.html': 'sf2.html', '/cards': 'cards.html', '/ld': 'ld.html', '/old': 'old1.html', '/old2.html': 'old2.html', '/empty': 'empty.html', '/js': 'js.html', '/d1': 'detail-icon.html', '/d2': 'detail-plain.html', '/d3': 'detail-dl.html', '/loc': 'loc.html', '/more2': 'more2.html', '/scroll': 'scroll.html', '/nextbtn': 'nextbtn.html', '/marketing': 'marketing.html', '/sfsize': 'sf-size.html', '/sfarrow': 'sf-arrow.html', '/bstart': 'b-start.html', '/bres': 'b-res.html', '/hboge': 'h-boge.html', '/hdh': 'h-dh.html', '/hacc': 'h-acc.html', '/hziel': 'h-ziel.html', '/hyear': 'h-year.html', '/karriere': 'marketing.html' };
+  const map = { '/': 'home.html', '/sf': 'sf1.html', '/sf2.html': 'sf2.html', '/cards': 'cards.html', '/ld': 'ld.html', '/old': 'old1.html', '/old2.html': 'old2.html', '/empty': 'empty.html', '/js': 'js.html', '/d1': 'detail-icon.html', '/d2': 'detail-plain.html', '/d3': 'detail-dl.html', '/d4': 'detail-addr.html', '/loc': 'loc.html', '/more2': 'more2.html', '/scroll': 'scroll.html', '/nextbtn': 'nextbtn.html', '/marketing': 'marketing.html', '/sfsize': 'sf-size.html', '/sfarrow': 'sf-arrow.html', '/bstart': 'b-start.html', '/bres': 'b-res.html', '/hboge': 'h-boge.html', '/hdh': 'h-dh.html', '/hacc': 'h-acc.html', '/hziel': 'h-ziel.html', '/hyear': 'h-year.html', '/karriere': 'marketing.html' };
   const f = map[u.pathname];
   if (u.pathname === '/gone') { res.writeHead(404, { 'Content-Type': 'text/html' }); res.end(fs.readFileSync(path.join(dir, '404.html'))); return; }
   if (u.pathname === '/moved') { res.writeHead(302, { Location: '/cards' }); res.end(); return; }
@@ -80,6 +81,7 @@ console.log('Einsatzort aus der Detailseite');
 {
   const t1 = await fetchJobLocation(ctx, base + '/d1'); expect('Pin-Symbol neben „Essen“ (Minimax)', t1.location === 'Essen', JSON.stringify(t1));
   const t2 = await fetchJobLocation(ctx, base + '/d2'); expect('Ohne Symbol: Kandidat „Hagen“ aus der Ortsliste', !t2.location && t2.candidates.some(c => lookupBuiltin(c)), JSON.stringify(t2.candidates));
+  const t4 = await fetchJobLocation(ctx, base + '/d4'); expect('Adresszeile „41564 Kaarst“ weit unten (SVT)', t4.candidates[0] === '41564 Kaarst', JSON.stringify(t4.candidates.slice(0, 2)));
   const t3 = await fetchJobLocation(ctx, base + '/d3'); expect('Definitionsliste „Standort“', t3.location === 'Gevelsberg', JSON.stringify(t3));
 }
 console.log('Workday-Schnittstelle (Attrappe)');
@@ -106,6 +108,22 @@ expect('Mehrere Orte → nächster', (await distanceFor('Hamburg / Hagen', home,
 { const d = await distanceFor('BSH 89407 Dillingen an der Donau DE', home, {}, { online: false }); expect('PLZ-Notnagel: 89407 Dillingen ≈ 375 km Luftlinie (nicht im Umkreis)', d > 330 && d < 420, d + ' km'); }
 expect('Unbekannter Ort offline → leer', (await distanceFor('Kleindorfhausen', home, {}, { online: false })) === null);
 
+
+// ---- Ortsverzeichnis, Ausland, Entfernungen ----
+{
+  const gz = parseGazetteer(unzipTxt(fs.readFileSync(path.join(dir, 'de-mini.zip'))));
+  setGazetteer(gz);
+  const H = { lat: 51.2867, lon: 7.295 };
+  const d = async (t) => distanceFor(t, H, {}, { online: false });
+  const kaarst = await d('41564 Kaarst'); expect('Kaarst (PLZ-Verzeichnis) ≈ 45 km', kaarst > 30 && kaarst < 60, kaarst + ' km');
+  const bit = await d('Bitburg'); expect('Bitburg (Ortsverzeichnis) > 50 km', bit > 120 && bit < 180, bit + ' km');
+  const dil = await d('BSH 89407 Dillingen an der Donau DE'); expect('Dillingen an der Donau ≈ 375 km', dil > 330 && dil < 420, dil + ' km');
+  expect('Österreich „Puch bei Hallein, 5, AT, 5412“ → Ausland, keine Distanz', isForeign('Puch bei Hallein, 5, AT, 5412') && (await d('Puch bei Hallein, 5, AT, 5412')) === null);
+  expect('USA „Northville, Michigan, MI, Vereinigte Staaten von Amerika“ → Ausland', isForeign('Northville, Michigan, MI, Vereinigte Staaten von Amerika') && (await d('Northville, Michigan, MI, Vereinigte Staaten von Amerika')) === null);
+  expect('„Köln, DE“ nicht Ausland', !isForeign('Köln, DE') && !isForeign('Dortmund'));
+  expect('Ort bekannt (strikt): „Kaarst“ ja, „Berufserfahrene“ nein', knownPlace('Kaarst', true) && !knownPlace('Berufserfahrene', true) && !knownPlace('Minimax GmbH', true));
+  setGazetteer(null);
+}
 
 // ---- Arbeitgebersuche (BA-Schnittstelle als Attrappe) ----
 {

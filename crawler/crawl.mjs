@@ -6,7 +6,8 @@ import { scanTarif } from './lib/tarif.mjs';
 import { makeStore } from './lib/dropbox.mjs';
 import { crawlEmployer, fetchDescription, fetchJobLocation } from './lib/extract.mjs';
 import { crawlBA } from './lib/adapters.mjs';
-import { distanceFor, lookupBuiltin, isForeign } from './lib/geo.mjs';
+import { distanceFor, lookupBuiltin, isForeign, knownPlace, setGazetteer } from './lib/geo.mjs';
+import { loadGazetteer } from './lib/gazetteer.mjs';
 import { synonymsFromText, matchTitle, parseQuery } from '../js/search.js';
 
 const ONLY = (process.env.ONLY || '').trim();
@@ -24,6 +25,7 @@ async function withTimeout(p, ms, label) {
 }
 
 const store = makeStore();
+try { setGazetteer(await loadGazetteer()); console.log('Ortsverzeichnis geladen'); } catch (e) { console.log('Ortsverzeichnis nicht verfügbar (' + e.message + ') – nur eingebaute Ortsliste und Ortssuche'); }
 log('Speicher:', store.mode, ONLY ? `· nur Quelle ${ONLY}` : '');
 const dbText = await store.read('db.json');
 if (!dbText) throw new Error('db.json nicht gefunden – bitte zuerst die App öffnen und mit Dropbox verbinden.');
@@ -123,7 +125,7 @@ for (const emp of todo) {
     const id = jobId(emp.id, it.url);
     const old = prevById.get(id);
     jobs.push({
-      id, employerId: emp.id, employer: it.employer || emp.name, title: it.title, url: it.url, location: (it.location && (!it.locWeak || lookupBuiltin(it.location)) ? it.location : '') || old?.location || '', locChecked: old?.locChecked, meta: (it.meta || '').slice(0, 200),
+      id, employerId: emp.id, employer: it.employer || emp.name, title: it.title, url: it.url, location: (it.location && (!it.locWeak || knownPlace(it.location, true)) ? it.location : '') || old?.location || '', locChecked: old?.locChecked, meta: (it.meta || '').slice(0, 200),
       postedAt: it.postedAt || '', distanceKm: it.distanceKm ?? old?.distanceKm, description: old?.description,
       firstSeen: old?.firstSeen || NOW, lastSeen: NOW, source: r.test.method,
     });
@@ -136,21 +138,21 @@ for (const j of prev.jobs || []) if (!touched.has(j.employerId) && alive.has(j.e
 for (const k of Object.keys(sources)) if (!alive.has(k)) delete sources[k];
 
 // ---- Fehlender Einsatzort: Detailseite der Stelle lesen (jede Stelle einmal je Verfahrensversion; passende Stellen zuerst) ----
-const LOC_V = 3;
+const LOC_V = 4;
 {
   const groups = synonymsFromText(settings.synonymsText || '');
   const phrases = parseQuery((profile.queries || []).join(','));
   const rank = j => { const m = phrases.length ? matchTitle(j.title, phrases, groups, true) : { score: 1 }; return m ? m.score : -1; };
-  const missing = jobs.filter(j => !j.location && j.locChecked !== LOC_V && j.url && !String(j.url).includes('#job-')).map(j => [rank(j), j]).sort((a, b) => b[0] - a[0]).filter(x => x[0] > 0).slice(0, 150).map(x => x[1]);
+  const missing = jobs.filter(j => !j.location && j.locChecked !== LOC_V && j.url && !String(j.url).includes('#job-')).map(j => [rank(j), j]).sort((a, b) => b[0] - a[0]).filter(x => x[0] > 0).slice(0, 400).map(x => x[1]);
   if (missing.length) {
     const lctx = await mkContext();
     let k = 0; const t1 = Date.now();
     await Promise.all(Array.from({ length: Math.min(4, missing.length) }, async () => {
-      while (k < missing.length && Date.now() - t1 < 8 * 60000) {
+      while (k < missing.length && Date.now() - t1 < 15 * 60000) {
         const j = missing[k++];
         const r = await fetchJobLocation(lctx, j.url);
         let loc = r.location;
-        if (!loc && r.candidates?.length) { const hit = r.candidates.find(c => lookupBuiltin(c)); if (hit) loc = hit; }
+        if (!loc && r.candidates?.length) { const hit = r.candidates.find(c => /^\d{5}\s/.test(c) && knownPlace(c)) || r.candidates.find(c => lookupBuiltin(c)) || r.candidates.find(c => knownPlace(c, true)); if (hit) loc = hit; }
         j.location = String(loc || '').slice(0, 120); j.locChecked = LOC_V;
       }
     }));

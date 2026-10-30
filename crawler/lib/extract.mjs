@@ -183,7 +183,9 @@ export async function fetchJobLocation(context, url) {
       const lines = (scope.innerText || '').split('\n').map(clean).filter(l => l.length >= 3 && l.length <= 45);
       const hi = h1 ? lines.findIndex(l => clean(h1.textContent).startsWith(l.slice(0, 20))) : 0;
       for (const l of lines.slice(Math.max(hi, 0), Math.max(hi, 0) + 25)) cand.push(l);
-      return { location: '', how: '', candidates: cand };
+      // Adresszeilen „41564 Kaarst“ irgendwo auf der Seite (z. B. unter „Dein neuer Arbeitsplatz“) – höchste Priorität
+      const plzLines = (document.body.innerText || '').split('\n').map(clean).filter(l => /^\d{5}\s+[A-ZÄÖÜ][^\d]{2,40}$/.test(l)).slice(0, 5);
+      return { location: '', how: '', candidates: [...new Set([...plzLines, ...cand])] };
     });
   } catch { return { location: '', how: '', candidates: [] }; } finally { await page.close().catch(() => {}); }
 }

@@ -47,8 +47,10 @@ export async function crawlBA({ queries, ort, radius, maxPerQuery = 150, arbeitg
   let httpStatus = 200, total = 0;
   for (const q of queries.length ? queries : ['']) {
     for (let page = 1; page <= Math.ceil(maxPerQuery / 50); page++) {
-      const url = `https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v4/jobs?was=${encodeURIComponent(q)}&wo=${encodeURIComponent(ort)}&umkreis=${radius}&angebotsart=1&size=50&page=${page}${arbeitgeber ? '&arbeitgeber=' + encodeURIComponent(arbeitgeber) : ''}`;
-      const r = await jfetch(url, { headers: { 'X-API-Key': 'jobboerse-jobsuche' } });
+      const qs = `was=${encodeURIComponent(q)}&wo=${encodeURIComponent(ort)}&umkreis=${radius}&angebotsart=1&size=50&page=${page}${arbeitgeber ? '&arbeitgeber=' + encodeURIComponent(arbeitgeber) : ''}`;
+      const BASE = 'https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/';
+      let r = await jfetch(BASE + 'v6/jobs?' + qs, { headers: { 'X-API-Key': 'jobboerse-jobsuche' } });
+      if (!r.ok) r = await jfetch(BASE + 'v4/jobs?' + qs, { headers: { 'X-API-Key': 'jobboerse-jobsuche' } }); // ältere Schnittstellenversion als Rückfall
       httpStatus = r.status;
       if (!r.ok) break;
       const j = await r.json();

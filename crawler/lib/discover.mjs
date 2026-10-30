@@ -3,6 +3,7 @@ import { nameTokens } from './adapters.mjs';
 import { discoverCareerUrls } from './extract.mjs';
 
 const API = 'https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v4';
+const API6 = 'https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v6';
 const KEY = { 'X-API-Key': 'jobboerse-jobsuche' };
 const AGENCY = /(zeitarbeit|personal(dienst|service|beratung|vermittlung|management)|arbeitnehmer(über|ueber)lassung|randstad|adecco|manpower|persona service|hays|gulp|brunel|ferchau|akka|bertrandt|expertum|dis ag|piening|tempton|orizon|aps |kelly|e-?personal|jobvermittlung|recruiting)/i;
 const AGGREGATOR = /(arbeitsagentur|stepstone|indeed|linkedin|xing|kimeta|jobware|monster|meinestadt|stellenanzeigen|jobs\.de|jobscout|jooble|gigajob|careerjet|bewerbung\.net|google|facebook|kununu|wikipedia)/i;
@@ -12,7 +13,7 @@ export const stats = { requests: 0, failed: 0, lastStatus: '', lastError: '' };
 async function jget(url, headers = {}, ms = 20000, asText = false) {
   stats.requests++;
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms);
-  try { const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) Chrome/124.0', 'Accept-Language': 'de', ...headers }, signal: ctl.signal, redirect: 'follow' }); if (!r.ok) { stats.failed++; stats.lastStatus = 'HTTP ' + r.status; return null; } return asText ? await r.text() : await r.json(); } catch (e) { stats.failed++; stats.lastError = String(e.message || e).slice(0, 120); return null; } finally { clearTimeout(t); }
+  try { const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) Chrome/124.0', 'Accept-Language': 'de', ...headers }, signal: ctl.signal, redirect: 'follow' }); if (!r.ok) { stats.failed++; stats.lastStatus = 'HTTP ' + r.status; try { stats.lastError = (await r.text()).replace(/\s+/g, ' ').slice(0, 100); } catch { /* egal */ } return null; } return asText ? await r.text() : await r.json(); } catch (e) { stats.failed++; stats.lastError = String(e.message || e).slice(0, 120); return null; } finally { clearTimeout(t); }
 }
 
 /** Größe aus Text („über 1.200 Mitarbeitende“) → Zahl oder null. */
@@ -29,7 +30,8 @@ export async function collectEmployers({ ort, radius, queries, maxPages = 3 }) {
   const map = new Map();
   for (const q of queries) {
     for (let page = 1; page <= maxPages; page++) {
-      const j = await jget(`${API}/jobs?was=${encodeURIComponent(q)}&wo=${encodeURIComponent(ort)}&umkreis=${radius}&angebotsart=1&size=50&page=${page}`, KEY);
+      const qs = `was=${encodeURIComponent(q)}&wo=${encodeURIComponent(ort)}&umkreis=${radius}&angebotsart=1&size=50&page=${page}`;
+      const j = (await jget(`${API6}/jobs?${qs}`, KEY)) || (await jget(`${API}/jobs?${qs}`, KEY));
       const list = (j && j.stellenangebote) || [];
       for (const s of list) {
         const name = (s.arbeitgeber || '').trim(); if (!name) continue;

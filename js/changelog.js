@@ -1,9 +1,27 @@
 // Versionsverlauf – wird in der App unter „Info“ angezeigt.
 // Bei jeder Änderung: neuen Eintrag OBEN einfügen, VERSION erhöhen und in sw.js die CACHE-Version anpassen.
 
-export const VERSION = '1.0.17';
+export const VERSION = '1.0.19';
 
 export const CHANGELOG = [
+  {
+    version: '1.0.19',
+    date: '2026-10-30',
+    title: 'Umkreis: Ortsverzeichnis, Ausland, mehr Detailseiten',
+    items: [
+      'Der Abruf lädt ein Verzeichnis aller deutschen Postleitzahlen und Orte (GeoNames). Damit bekommt fast jede Stelle mit Ort oder Postleitzahl eine Entfernung (z. B. Bitburg, Kaarst).',
+      'Stellen im Ausland (Österreich, USA, … auch mit Länderkürzel wie „AT“) werden sicher erkannt und nie mit gleichnamigen deutschen Orten verwechselt; sie fallen beim Umkreisfilter heraus.',
+      'Einsatzort aus der Stellen-Detailseite: Adresszeilen wie „41564 Kaarst“ werden auch weit unten auf der Seite gefunden; bis zu 400 Stellen je Lauf, alle bisher ungeklärten werden neu geprüft.',
+    ],
+  },
+  {
+    version: '1.0.18',
+    date: '2026-10-30',
+    title: 'Bundesagentur: neue Schnittstellenversion',
+    items: [
+      'Abfragen bei der Bundesagentur (Arbeitgebersuche, Portal „Bundesagentur“, „Stellen über die Bundesagentur suchen“) nutzen jetzt die aktuelle Schnittstellenversion v6 und fallen bei Fehlern auf v4 zurück. Der Fehlertext der Bundesagentur wird mit angezeigt.',
+    ],
+  },
   {
     version: '1.0.17',
     date: '2026-10-30',
