@@ -2,8 +2,8 @@ import { h, fmtBytes, fmtRel, downloadBlob } from '../util.js';
 import { list, settings, put } from '../store.js';
 import { sheet, toast, confirmDialog, field, input, textarea, select, emptyState, mount } from '../ui.js';
 import { CATEGORIES, catLabel, MASTER, getMaster, setMaster, uploadDocument, openDocument, deleteDocument, downloadDocumentBlob } from '../files.js';
-import { docxToText, callClaude } from '../docs.js';
-import { pageTexts, segment, sortSegments, splitPdf, segmentName, analyzeZeugnis, textOfFile, NOTEN, noteText } from '../zeugnis.js';
+import { docxToText, callClaude, callClaudeVision } from '../docs.js';
+import { pageTexts, segment, sortSegments, splitPdf, segmentName, analyzeZeugnis, textOfFile, ocrPages, NOTEN, noteText } from '../zeugnis.js';
 import * as dbx from '../dropbox.js';
 import { openTailor, aiKey } from './tailor.js';
 
@@ -24,13 +24,19 @@ const noteClass = n => n == null ? 'mute' : n <= 2.5 ? 'ok' : n <= 3.5 ? 'info' 
 const fmtNote = n => n == null ? '–' : n.toFixed(1).replace('.', ',');
 
 /** Zeugnis bewerten (KI, sonst nur Zufriedenheitsformel) und am Dokument speichern. */
-async function analyzeDoc(doc, text) {
+async function analyzeDoc(doc, text, { keepText = false } = {}) {
   if (!text || text.replace(/\s+/g, '').length < 60) throw new Error('Im Dokument ließ sich kein Text lesen (Scan oder Foto?).');
   let a;
   try { a = await analyzeZeugnis({ text, employer: doc.employer, apiKey: aiKey(), model: settings().ai?.model || 'claude-sonnet-5-5', callClaude }); }
   catch (e) { a = { ...(await analyzeZeugnis({ text, employer: doc.employer })), fehler: e.message }; }
-  put('documents', { ...doc, analysis: a });
+  put('documents', { ...doc, analysis: a, text: keepText ? text.slice(0, 12000) : doc.text });
   return a;
+}
+
+const scanned = pages => pages.every(t => t.replace(/\s+/g, '').length < 30);
+async function ocrFile(buf, onProgress) {
+  if (!aiKey()) throw new Error('Für Scans braucht die App den KI-Zugang (Info → Einstellungen → KI): Die KI liest den Text vom Bild ab.');
+  return ocrPages({ buf, apiKey: aiKey(), model: settings().ai?.model || 'claude-sonnet-5-5', callVision: callClaudeVision, onProgress });
 }
 
 function analysisSheet(d, redraw) {
@@ -51,13 +57,13 @@ function analysisSheet(d, redraw) {
       h('p', { class: 'muted small' }, 'Einschätzung durch KI auf Basis des Zeugnistextes – eine Orientierung, keine Rechtsberatung. Zeugnissprache ist mehrdeutig; bei wichtigen Entscheidungen lohnt eine zweite Meinung.'),
       h('div', { class: 'btn-row' }, h('button', { class: 'btn', type: 'button', onclick: async ev => {
         ev.target.disabled = true; ev.target.textContent = 'Bewerte …';
-        try { const blob = await downloadDocumentBlob(d); const f = new File([blob], d.name, { type: blob.type }); await analyzeDoc(d, await textOfFile(f, { docxToText })); toast('Bewertung aktualisiert', 'ok'); close(); redraw(); } catch (e) { toast(e.message, 'bad'); ev.target.disabled = false; ev.target.textContent = a ? 'Erneut bewerten' : 'Jetzt bewerten'; }
+        try { let text = d.text || ''; let ocr = false; if (!text) { const blob = await downloadDocumentBlob(d); const f = new File([blob], d.name, { type: blob.type }); text = await textOfFile(f, { docxToText }); if (text.replace(/\s+/g, '').length < 60 && /\.pdf$/i.test(d.name)) { text = (await ocrFile(await f.arrayBuffer(), (i, n) => { ev.target.textContent = `Lese Scan (Seite ${i} von ${n}) …`; })).join('\n'); ocr = true; } } await analyzeDoc(d, text, { keepText: ocr || !!d.text }); toast('Bewertung aktualisiert', 'ok'); close(); redraw(); } catch (e) { toast(e.message, 'bad'); ev.target.disabled = false; ev.target.textContent = a ? 'Erneut bewerten' : 'Jetzt bewerten'; }
       } }, a ? 'Erneut bewerten' : 'Jetzt bewerten')));
   }, { wide: true });
 }
 
-function splitSheet(file, buf, pages, redraw) {
-  const noText = pages.every(t => t.replace(/\s+/g, '').length < 30);
+function splitSheet(file, buf, pages, redraw, { ocr = false } = {}) {
+  const noText = scanned(pages);
   let segs = noText ? [{ from: 1, to: pages.length, employer: '', year: null, kind: 'Arbeitszeugnis' }] : segment(pages);
   sheet('Zeugnisse im PDF', close => {
     const box = h('div'), keep = h('input', { type: 'checkbox' }), ai = h('input', { type: 'checkbox', checked: true }), msg = h('p', { class: 'muted small', role: 'status' });
@@ -76,7 +82,7 @@ function splitSheet(file, buf, pages, redraw) {
     };
     paint();
     return h('div', null,
-      h('p', null, noText ? 'In diesem PDF ließ sich kein Text lesen (vermutlich ein Scan). Bitte die Abschnitte selbst eintragen.' : `${segs.length} Zeugnis(se) erkannt, sortiert nach Jahr (neuestes zuerst). Bitte prüfen und bei Bedarf korrigieren.`),
+      h('p', null, noText ? 'In diesem PDF ließ sich kein Text lesen (Scan). Ohne KI-Zugang kann die App den Scan nicht lesen – bitte die Abschnitte selbst eintragen oder unter Info → Einstellungen → KI den Zugang hinterlegen.' : `${segs.length} Zeugnis(se) erkannt${ocr ? ' (Text vom Scan durch die KI abgeschrieben)' : ''}, sortiert nach Jahr (neuestes zuerst). Bitte prüfen und bei Bedarf korrigieren – bei Scans besonders Arbeitgeber, Jahr und Seitengrenzen.`),
       box,
       h('div', { class: 'btn-row' }, h('button', { class: 'btn small', type: 'button', onclick: () => { segs.push({ from: 1, to: pages.length, employer: '', year: null, kind: 'Arbeitszeugnis' }); paint(); } }, '+ Abschnitt')),
       h('label', { class: 'check' }, keep, 'Gesamtes PDF zusätzlich behalten'),
@@ -90,7 +96,7 @@ function splitSheet(file, buf, pages, redraw) {
             for (const p of parts) {
               msg.textContent = `Lade hoch: ${p.name} …`;
               const doc = await uploadDocument(new File([p.bytes], p.name, { type: 'application/pdf' }), 'arbeitszeugnisse', { employer: p.seg.employer, year: p.seg.year, note: `Seite ${p.seg.from}–${p.seg.to} des Sammel-PDFs` }); ok++;
-              if (ai.checked) { msg.textContent = `Bewerte: ${p.seg.employer || p.name} …`; try { await analyzeDoc(doc, pages.slice(p.seg.from - 1, p.seg.to).join('\n')); } catch (e) { toast(`Bewertung ${p.seg.employer || p.name}: ${e.message}`, 'bad'); } }
+              if (ai.checked) { msg.textContent = `Bewerte: ${p.seg.employer || p.name} …`; try { await analyzeDoc(doc, pages.slice(p.seg.from - 1, p.seg.to).join('\n'), { keepText: ocr }); } catch (e) { toast(`Bewertung ${p.seg.employer || p.name}: ${e.message}`, 'bad'); } }
             }
             if (keep.checked) await uploadDocument(file, 'arbeitszeugnisse', { note: 'Gesamtes PDF' });
             toast(`${ok} Zeugnis(se) abgelegt`, 'ok'); close(); redraw();
@@ -114,11 +120,11 @@ function uploadSheet(redraw, preset) {
         const files = [...file.files]; if (!files.length) { toast('Bitte eine Datei wählen.', 'bad'); return; }
         if (cat.value === 'arbeitszeugnisse' && files.length === 1 && /\.pdf$/i.test(files[0].name)) { // Sammel-PDF: erkennen und aufteilen
           ev.target.disabled = true; msg.textContent = 'Lese das PDF …';
-          try { const buf = await files[0].arrayBuffer(); const pages = await pageTexts(buf); if (pages.length > 1) { ev.target.disabled = false; msg.textContent = ''; close(); splitSheet(files[0], buf, pages, redraw); return; } } catch (e) { toast('PDF konnte nicht analysiert werden (' + e.message + ') – wird als eine Datei hochgeladen.', 'bad'); }
+          try { const buf = await files[0].arrayBuffer(); let pages = await pageTexts(buf), ocr = false; if (pages.length > 1 && scanned(pages) && aiKey()) { pages = await ocrFile(buf, (i, n) => { msg.textContent = `Lese Scan mit KI … Seite ${i} von ${n}`; }); ocr = true; } if (pages.length > 1) { ev.target.disabled = false; msg.textContent = ''; close(); splitSheet(files[0], buf, pages, redraw, { ocr }); return; } } catch (e) { toast('PDF konnte nicht analysiert werden (' + e.message + ') – wird als eine Datei hochgeladen.', 'bad'); }
           ev.target.disabled = false;
         }
         ev.target.disabled = true; let ok = 0;
-        for (const f of files) { msg.textContent = `Lade hoch: ${f.name} …`; try { const doc = await uploadDocument(f, cat.value, { note: cat.value === 'arbeitszeugnisse' ? note.value.trim() : '' }); ok++; if (cat.value === 'arbeitszeugnisse') { msg.textContent = `Bewerte: ${f.name} …`; try { await analyzeDoc(doc, await textOfFile(f, { docxToText })); } catch (e) { toast(`Bewertung ${f.name}: ${e.message}`, 'bad'); } } } catch (e) { toast(`${f.name}: ${e.message}`, 'bad'); } }
+        for (const f of files) { msg.textContent = `Lade hoch: ${f.name} …`; try { const doc = await uploadDocument(f, cat.value, { note: cat.value === 'arbeitszeugnisse' ? note.value.trim() : '' }); ok++; if (cat.value === 'arbeitszeugnisse') { msg.textContent = `Bewerte: ${f.name} …`; try { let text = await textOfFile(f, { docxToText }), ocr = false; if (text.replace(/\s+/g, '').length < 60 && /\.pdf$/i.test(f.name)) { text = (await ocrFile(await f.arrayBuffer(), (i, n) => { msg.textContent = `Lese Scan mit KI … Seite ${i} von ${n}`; })).join('\n'); ocr = true; } await analyzeDoc(doc, text, { keepText: ocr }); } catch (e) { toast(`Bewertung ${f.name}: ${e.message}`, 'bad'); } } } catch (e) { toast(`${f.name}: ${e.message}`, 'bad'); } }
         ev.target.disabled = false; if (ok) { toast(`${ok} Datei(en) in der Dropbox abgelegt`, 'ok'); close(); redraw(); }
       } }, 'Hochladen')));
   });

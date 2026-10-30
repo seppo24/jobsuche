@@ -145,6 +145,18 @@ export async function callClaude({ apiKey, model, system, user, maxTokens = 6000
   return (j.content || []).map(c => c.text || '').join('');
 }
 
+/** Wie callClaude, aber mit Bildern: content = [{type:'image', source:{type:'base64', media_type, data}}, {type:'text', text}] */
+export async function callClaudeVision({ apiKey, model, system, content, maxTokens = 6000, signal }) {
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST', signal,
+    headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+    body: JSON.stringify({ model, max_tokens: maxTokens, system, messages: [{ role: 'user', content }] }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j?.error?.message || `Anthropic-API: HTTP ${r.status}`);
+  return (j.content || []).map(c => c.text || '').join('');
+}
+
 export function parseSections(text) {
   const out = { cv: '', letter: '', motivation: '', notes: '' };
   const map = { LEBENSLAUF: 'cv', ANSCHREIBEN: 'letter', MOTIVATIONSSCHREIBEN: 'motivation', HINWEISE: 'notes' };

@@ -179,3 +179,49 @@ export async function textOfFile(file, { docxToText } = {}) {
   if (/\.docx$/i.test(file.name) && docxToText) return docxToText(window.JSZip, buf);
   return '';
 }
+
+// ---- Scans: Seiten als Bilder an die KI geben und den Text abschreiben lassen ----
+/** Seiten als JPEG (Base64) rendern. */
+export async function renderPages(buf, { maxPx = 1500, quality = 0.78, from = 1, to = Infinity } = {}) {
+  const lib = await loadPdfJs();
+  const doc = await lib.getDocument({ data: buf.slice(0) }).promise;
+  const out = [];
+  for (let p = from; p <= Math.min(to, doc.numPages); p++) {
+    const page = await doc.getPage(p);
+    const v0 = page.getViewport({ scale: 1 });
+    const scale = Math.min(3, maxPx / Math.max(v0.width, v0.height) * 1.0);
+    const vp = page.getViewport({ scale });
+    const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+    await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+    out.push(c.toDataURL('image/jpeg', quality).split(',')[1]);
+  }
+  return out;
+}
+
+export function parseOcr(raw, n) {
+  const parts = String(raw).split(/={3}\s*SEITE\s+(\d+)\s*={3}/i);
+  const res = Array(n).fill('');
+  for (let i = 1; i < parts.length; i += 2) { const k = parseInt(parts[i], 10) - 1; if (k >= 0 && k < n) res[k] = (parts[i + 1] || '').trim(); }
+  if (parts.length === 1 && n === 1) res[0] = String(raw).trim();
+  return res;
+}
+
+/** Text aller Seiten eines Scans mit der KI erkennen (3 Seiten je Anfrage). */
+export async function ocrPages({ buf, apiKey, model, callVision, onProgress = () => {}, batch = 3, total }) {
+  const lib = await loadPdfJs();
+  const n = total || (await lib.getDocument({ data: buf.slice(0) }).promise).numPages;
+  const texts = [];
+  for (let from = 1; from <= n; from += batch) {
+    const to = Math.min(n, from + batch - 1);
+    onProgress(from, n);
+    const imgs = await renderPages(buf, { from, to });
+    const content = [];
+    imgs.forEach((data, i) => { content.push({ type: 'text', text: `Seite ${i + 1} von ${imgs.length} dieses Abschnitts:` }); content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data } }); });
+    content.push({ type: 'text', text: `Schreibe den gesamten Text jeder Seite wortgetreu ab (deutsche Rechtschreibung des Originals, keine Zusammenfassung, nichts ergänzen oder korrigieren). Kennzeichne jede Seite mit einer eigenen Zeile "===SEITE k===" (k = 1 bis ${imgs.length}). Ist etwas unleserlich, schreibe [unleserlich].` });
+    let raw, tries = 0;
+    for (;;) { try { raw = await callVision({ apiKey, model, system: 'Du bist ein präzises OCR-System für deutsche Dokumente. Du gibst ausschließlich den abgeschriebenen Text aus.', content, maxTokens: 6000 }); break; } catch (e) { if (++tries >= 2) throw e; }
+    }
+    texts.push(...parseOcr(raw, imgs.length));
+  }
+  return texts;
+}

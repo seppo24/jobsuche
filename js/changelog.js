@@ -1,9 +1,18 @@
 // Versionsverlauf – wird in der App unter „Info“ angezeigt.
 // Bei jeder Änderung: neuen Eintrag OBEN einfügen, VERSION erhöhen und in sw.js die CACHE-Version anpassen.
 
-export const VERSION = '1.0.21';
+export const VERSION = '1.0.22';
 
 export const CHANGELOG = [
+  {
+    version: '1.0.22',
+    date: '2026-10-30',
+    title: 'Gescannte Zeugnisse lesen',
+    items: [
+      'Gescannte Arbeitszeugnisse (PDF ohne Text) werden jetzt gelesen: Die Seiten gehen als Bilder an die KI, die den Text abschreibt. Danach wird das Sammel-PDF wie gewohnt nach Arbeitgeber und Jahr geteilt und bewertet. Der abgeschriebene Text bleibt am Zeugnis gespeichert, „Erneut bewerten“ braucht dann kein neues Lesen.',
+      'Dafür ist der KI-Zugang aus Info → Einstellungen nötig. Ohne ihn lassen sich Scans nur von Hand einteilen.',
+    ],
+  },
   {
     version: '1.0.21',
     date: '2026-10-30',
