@@ -1,9 +1,19 @@
 // Versionsverlauf – wird in der App unter „Info“ angezeigt.
 // Bei jeder Änderung: neuen Eintrag OBEN einfügen, VERSION erhöhen und in sw.js die CACHE-Version anpassen.
 
-export const VERSION = '1.0.24';
+export const VERSION = '1.0.25';
 
 export const CHANGELOG = [
+  {
+    version: '1.0.25',
+    date: '2026-10-30',
+    title: 'Abruf bleibt nicht mehr hängen',
+    items: [
+      'Der Stellenabruf setzt für jede einzelne Seite und für die Online-Ortssuche ein Zeitlimit und gibt bei Fehlern nicht mehr endlos weitere Anfragen auf.',
+      'Nach spätestens 140 Minuten wird der bis dahin gesammelte Stand als Ergebnis gespeichert und der Abruf sauber beendet.',
+      'Im Protokoll steht jetzt, wie viele Online-Ortsanfragen gestellt wurden.'
+    ]
+  },
   {
     version: '1.0.24',
     date: '2026-10-30',

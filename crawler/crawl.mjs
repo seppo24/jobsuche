@@ -6,7 +6,7 @@ import { scanTarif } from './lib/tarif.mjs';
 import { makeStore } from './lib/dropbox.mjs';
 import { crawlEmployer, fetchDescription, fetchJobLocation } from './lib/extract.mjs';
 import { crawlBA } from './lib/adapters.mjs';
-import { distanceFor, lookupBuiltin, isForeign, knownPlace, setGazetteer } from './lib/geo.mjs';
+import { distanceFor, lookupBuiltin, isForeign, knownPlace, setGazetteer, geoStats } from './lib/geo.mjs';
 import { loadGazetteer } from './lib/gazetteer.mjs';
 import { synonymsFromText, matchTitle, parseQuery } from '../js/search.js';
 
@@ -15,6 +15,13 @@ const CONCURRENCY = +(process.env.CONCURRENCY || 6);
 const CRAWL_DEADLINE = Date.now() + 100 * 60000; // nach 100 Minuten werden keine neuen Quellen mehr begonnen (alte Stände bleiben)
 const SOURCE_TIMEOUT = +(process.env.SOURCE_TIMEOUT || 210000);
 const NOW = new Date().toISOString();
+// Wächter: nach 140 Minuten wird der Zwischenstand als Ergebnis gespeichert und der Abruf beendet (GitHub bricht bei 180 ab)
+setTimeout(async () => {
+  console.log('Gesamt-Zeitlimit (140 Minuten) erreicht – speichere den Zwischenstand');
+  try { const sn = globalThis.__snap; if (sn) { await makeStore().write('jobs.json', JSON.stringify({ ...sn, generatedAt: new Date().toISOString() })); console.log('Zwischenstand als Ergebnis gespeichert'); } } catch (e) { console.log('Speichern fehlgeschlagen:', e.message); }
+  process.exit(sn0() ? 0 : 1);
+}, 140 * 60000).unref?.();
+const sn0 = () => !!globalThis.__snap;
 const PORTAL_LINK_ONLY = new Set(['stepstone', 'linkedin', 'indeed', 'xing']);
 
 const jobId = (empId, url) => crypto.createHash('sha1').update(empId + '|' + url.replace(/[?#].*$/, '').replace(/\/$/, '').toLowerCase()).digest('hex').slice(0, 12);
@@ -142,6 +149,7 @@ for (const k of Object.keys(sources)) if (!alive.has(k)) delete sources[k];
 // Zwischenstand sofort speichern (die App zeigt die neuen Stellen schon, auch wenn die späteren Schritte lange dauern)
 await store.write('jobs.json', JSON.stringify({ generatedAt: NOW, partial: true, version: 1, sources, geo, jobs: [...jobs].sort((a, b) => (b.firstSeen || '').localeCompare(a.firstSeen || '')) }));
 log('Zwischenstand gespeichert:', jobs.length, 'Stellen');
+globalThis.__snap = { generatedAt: NOW, version: 1, sources, geo, jobs: [...jobs].sort((a, b) => (b.firstSeen || '').localeCompare(a.firstSeen || '')) };
 
 // ---- Fehlender Einsatzort: Detailseite der Stelle lesen (jede Stelle einmal je Verfahrensversion; passende Stellen zuerst) ----
 const LOC_V = 4;
@@ -154,9 +162,9 @@ const LOC_V = 4;
     const lctx = await mkContext();
     let k = 0; const t1 = Date.now();
     await Promise.all(Array.from({ length: Math.min(4, missing.length) }, async () => {
-      while (k < missing.length && Date.now() - t1 < 15 * 60000) {
+      while (k < missing.length && Date.now() - t1 < 10 * 60000) {
         const j = missing[k++];
-        const r = await fetchJobLocation(lctx, j.url);
+        const r = await withTimeout(fetchJobLocation(lctx, j.url), 45000, 'Einsatzort').catch(() => ({ location: '', candidates: [] }));
         let loc = r.location;
         if (!loc && r.candidates?.length) { const hit = r.candidates.find(c => /^\d{5}\s/.test(c) && knownPlace(c)) || r.candidates.find(c => lookupBuiltin(c)) || r.candidates.find(c => knownPlace(c, true)); if (hit) loc = hit; }
         j.location = String(loc || '').slice(0, 120); j.locChecked = LOC_V;
@@ -168,14 +176,12 @@ const LOC_V = 4;
 }
 
 // ---- Entfernungen ----
-let geoCalls = 0;
 for (const j of jobs) {
   if (j.distanceKm != null || !j.location) continue;
-  const online = geoCalls < 60;
-  const before = Object.keys(geo).length;
+  const online = geoStats.calls < 60 && geoStats.fails < 6; // höchstens 60 Anfragen, nach 6 Fehlern in Folge keine weiteren
   j.distanceKm = (await distanceFor(j.location, home, geo, { online })) ?? undefined;
-  if (Object.keys(geo).length > before) geoCalls++;
 }
+log(`Ortssuche online: ${geoStats.calls} Anfragen, ${geoStats.fails} Fehler in Folge`);
 
 for (const j of jobs) { j.foreign = (j.distanceKm == null || j.distanceKm > 300) && isForeign(j.location) ? true : undefined; }
 
@@ -184,7 +190,7 @@ const ctx = await mkContext();
 let nDesc = 0;
 for (const j of jobs) {
   if (nDesc >= 40) break;
-  if (savedIds.has(j.id) && !j.description) { j.description = await fetchDescription(ctx, j.url); nDesc++; }
+  if (savedIds.has(j.id) && !j.description) { j.description = await withTimeout(fetchDescription(ctx, j.url), 45000, 'Beschreibung').catch(() => ''); nDesc++; }
 }
 // ---- Tarifbindung: ausdrückliche Hinweise in den Stellenanzeigen (je Arbeitgeber höchstens 2 Anzeigen, alle 30 Tage) ----
 {
@@ -197,7 +203,7 @@ for (const j of jobs) {
     if (!mine.length || nT >= 60) continue;
     for (const j of mine) {
       nT++;
-      const text = j.description || await fetchDescription(ctx, j.url);
+      const text = j.description || await withTimeout(fetchDescription(ctx, j.url), 45000, 'Tarifhinweis').catch(() => '');
       const t = scanTarif(text);
       if (t) { src.tarifHint = { name: t.name, eg: t.eg, gesichert: true, quelle: 'Stellenanzeige: „' + t.evidence + '“' }; break; }
     }

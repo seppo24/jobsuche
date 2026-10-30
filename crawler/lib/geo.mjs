@@ -69,6 +69,7 @@ export async function distanceFor(location, home, cache, opts = {}) {
   const z = m && PLZ2[m[1].slice(0, 2)];
   return z ? haversine([home.lat, home.lon], z) : null;
 }
+export const geoStats = { calls: 0, fails: 0 }; // Online-Ortssuche: Anfragen und Fehlschläge (der Abruf begrenzt damit seine Wartezeit)
 async function distanceCore(location, home, cache, { fetchImpl = fetch, online = true } = {}) {
   if (!location) return null;
   const parts = cleanLocation(location);
@@ -90,16 +91,17 @@ async function distanceCore(location, home, cache, { fetchImpl = fetch, online =
   if (cache[key]) return haversine(h, cache[key]);
   if (!online) return null;
   try {
+    geoStats.calls++;
     await new Promise(r => setTimeout(r, 1100));
     const q = encodeURIComponent(location.replace(/\b\d{5}\b/, '').trim());
-    const r = await fetchImpl(`https://nominatim.openstreetmap.org/search?format=json&limit=5&addressdetails=0&q=${q}`, { headers: { 'User-Agent': 'jobsuche-privat-app/1.0 (persoenliche Nutzung)', 'Accept-Language': 'de' } });
+    const r = await fetchImpl(`https://nominatim.openstreetmap.org/search?format=json&limit=5&addressdetails=0&q=${q}`, { headers: { 'User-Agent': 'jobsuche-privat-app/1.0 (persoenliche Nutzung)', 'Accept-Language': 'de' }, signal: AbortSignal.timeout(8000) });
     const j = await r.json();
     const cands = (Array.isArray(j) ? j : []).filter(x => ['city', 'town', 'village', 'hamlet', 'suburb', 'municipality', 'administrative', 'locality', 'neighbourhood', 'quarter', 'borough', 'county'].includes(x.addresstype) || ['place', 'boundary'].includes(x.class));
     if (cands.length) { // bei mehrdeutigen Namen („Neustadt“) gilt der Ort, der am nächsten zum Wohnort liegt
       const best = cands.map(x => [+x.lat, +x.lon]).sort((a, b) => haversine(h, a) - haversine(h, b))[0];
       cache[key] = best; return haversine(h, best);
     }
-    cache[key] = null;
-  } catch { /* offline o. Ä. – später erneut */ }
+    cache[key] = null; geoStats.fails = 0;
+  } catch { geoStats.fails++; /* offline o. Ä. – später erneut */ }
   return null;
 }
