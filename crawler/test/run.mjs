@@ -28,7 +28,7 @@ const server = http.createServer((req, res) => {
     const rows = Array.from({ length: Math.max(0, Math.min(10, 25 - start)) }, (_, i) => `<tr class="data-row"><td><span class="jobTitle"><a href="/job/${start + i}/" class="jobTitle-link">${T[(start + i) % 5]} Nr. ${start + i} (m/w/d)</a></span></td><td><span class="jobLocation">Wuppertal, DE</span></td></tr>`).join('');
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(`<!doctype html><html><head><meta charset="utf-8"><title>Suche</title></head><body><h1>Stellenangebote</h1><span class="paginationLabel">Ergebnisse ${start + 1} – ${Math.min(start + 10, 25)} von 25</span><table><tbody>${rows}</tbody></table></body></html>`); return;
   }
-  const map = { '/': 'home.html', '/sf': 'sf1.html', '/sf2.html': 'sf2.html', '/cards': 'cards.html', '/ld': 'ld.html', '/old': 'old1.html', '/old2.html': 'old2.html', '/empty': 'empty.html', '/js': 'js.html', '/d1': 'detail-icon.html', '/d2': 'detail-plain.html', '/d3': 'detail-dl.html', '/loc': 'loc.html', '/more2': 'more2.html', '/scroll': 'scroll.html', '/nextbtn': 'nextbtn.html', '/marketing': 'marketing.html', '/hboge': 'h-boge.html', '/hdh': 'h-dh.html', '/hacc': 'h-acc.html', '/hziel': 'h-ziel.html', '/hyear': 'h-year.html', '/karriere': 'marketing.html' };
+  const map = { '/': 'home.html', '/sf': 'sf1.html', '/sf2.html': 'sf2.html', '/cards': 'cards.html', '/ld': 'ld.html', '/old': 'old1.html', '/old2.html': 'old2.html', '/empty': 'empty.html', '/js': 'js.html', '/d1': 'detail-icon.html', '/d2': 'detail-plain.html', '/d3': 'detail-dl.html', '/loc': 'loc.html', '/more2': 'more2.html', '/scroll': 'scroll.html', '/nextbtn': 'nextbtn.html', '/marketing': 'marketing.html', '/sfsize': 'sf-size.html', '/sfarrow': 'sf-arrow.html', '/bstart': 'b-start.html', '/bres': 'b-res.html', '/hboge': 'h-boge.html', '/hdh': 'h-dh.html', '/hacc': 'h-acc.html', '/hziel': 'h-ziel.html', '/hyear': 'h-year.html', '/karriere': 'marketing.html' };
   const f = map[u.pathname];
   if (u.pathname === '/gone') { res.writeHead(404, { 'Content-Type': 'text/html' }); res.end(fs.readFileSync(path.join(dir, '404.html'))); return; }
   if (u.pathname === '/moved') { res.writeHead(302, { Location: '/cards' }); res.end(); return; }
@@ -60,6 +60,9 @@ const cases = [
   ['Akkordeon mit #-Links (Fluitronics)', '/hacc', r => r.items.length === 6 && !r.items.some(i => /Initiativ/i.test(i.title))],
   ['Stellen als Überschriften ohne Links (Ziel)', '/hziel', r => r.items.length === 5 && r.items[0].url.includes('#')],
   ['Jahreszahl ist keine Stellenzahl', '/hyear', r => r.items.length === 8 && r.test.status === 'ok'],
+  ['SuccessFactors: „Einträge pro Seite“ auf Maximum (40 Stellen)', '/sfsize', r => r.items.length === 40],
+  ['Seitenwechsel über Pfeil-Bild (30 Stellen)', '/sfarrow', r => r.items.length === 30],
+  ['„Alle Jobs anzeigen“ führt auf eigene Seite (30 Stellen)', '/bstart', r => r.items.length === 30 && r.test.status === 'ok'],
   ['Seite ohne Stellenliste', '/marketing', r => (r.items.length === 0 && r.test.status === 'unsicher') || r.test.confidence === 'niedrig'],
   ['Alte Adresse 404 → Vorschlag', '/gone', r => r.test.status === 'fehler' && r.test.suggestions.some(s => s.url.endsWith('/karriere/stellenangebote') || s.url.includes('karriere'))],
   ['Weiterleitung wird gemeldet', '/moved', r => r.test.suggestions.some(s => s.url.endsWith('/cards'))],
@@ -97,6 +100,7 @@ expect('„Hybrid | Köln / Hagen (DE)“ → nächster', (await distanceFor('Hy
 expect('„Remote“ allein → unbekannt', (await distanceFor('Remote', home, {}, { online: false })) === null);
 expect('Ausland erkannt', isForeign('Veghel, Netherlands') && !isForeign('Köln, Germany') && !isForeign('Hagen'));
 expect('Mehrere Orte → nächster', (await distanceFor('Hamburg / Hagen', home, {}, { online: false })) < 20);
+{ const d = await distanceFor('BSH 89407 Dillingen an der Donau DE', home, {}, { online: false }); expect('PLZ-Notnagel: 89407 Dillingen ≈ 375 km Luftlinie (nicht im Umkreis)', d > 330 && d < 420, d + ' km'); }
 expect('Unbekannter Ort offline → leer', (await distanceFor('Kleindorfhausen', home, {}, { online: false })) === null);
 
 await browser.close(); server.close();

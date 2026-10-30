@@ -92,6 +92,10 @@ for (const emp of todo) {
   const r = results.get(emp.id);
   if (!r) continue;
   const failed = ['fehler', 'blockiert'].includes(r.test.status);
+  // Vom Nutzer bestätigtes Ergebnis (manuell geprüft, Adresse unverändert): nicht mehr „unsicher“
+  if (emp.confirm && emp.confirm.url === emp.url && r.test.status === 'unsicher') {
+    r.test.status = r.items.length ? 'ok' : 'leer'; r.test.confidence = 'mittel'; r.test.confirmed = true; r.test.message = 'Von dir bestätigt';
+  }
   // Unsichere Treffer (niedrige Erkennungssicherheit) werden nicht als Stellen übernommen – nur als Stichprobe im Quellen-Test gezeigt
   const discard = r.test.confidence === 'niedrig' && r.items.length > 0;
   if (discard) { r.test.discarded = r.items.length; r.items = []; }

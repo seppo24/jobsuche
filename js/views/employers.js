@@ -3,7 +3,10 @@ import { S, list, get, put, del, settings } from '../store.js';
 import { sheet, toast, confirmDialog, field, input, textarea, select, statusPill, emptyState, mount } from '../ui.js';
 import { PORTAL_TYPES, canTrigger, triggerCrawl, searchUrl, watchForResult, isWatching } from '../portals.js';
 
-const testOf = id => S.jobs.sources?.[id]?.test || S.jobs.sources?.[id] || null;
+const rawTest = id => S.jobs.sources?.[id]?.test || S.jobs.sources?.[id] || null;
+const isConfirmed = e => !!(e && e.confirm && e.confirm.url === e.url);
+// Manuell bestätigte Ergebnisse gelten nicht mehr als „unsicher“ (sofort in der App, der Abruf übernimmt es beim nächsten Lauf)
+const testOf = id => { const t = rawTest(id), e = get('employers', id); return t && t.status === 'unsicher' && isConfirmed(e) ? { ...t, status: t.count ? 'ok' : 'leer', confirmed: true, message: 'Von dir bestätigt' } : t; };
 const countOf = id => (S.jobs.jobs || []).filter(j => j.employerId === id).length;
 const sameUrl = (a, b) => String(a || '').replace(/\/+$/, '').toLowerCase() === String(b || '').replace(/\/+$/, '').toLowerCase();
 export const isStale = (e, t) => !!(t && t.url && !sameUrl(t.url, e.url));
@@ -13,7 +16,14 @@ function testPanel(e, test, close) {
   const blocked = ['blockiert', 'fehler'].includes(test?.status) && !e.baSearch && e.kind !== 'portal';
   if (!test) return h('div', { class: 'banner info' }, 'Diese Quelle wurde noch nicht abgerufen. Der nächste automatische Lauf prüft sie – oder starte den Test jetzt.');
   const sug = test.suggestions || [];
-  return h('div', null,
+  const confirmBtn = rawTest(e.id)?.status === 'unsicher' && !isConfirmed(e) && !blocked
+    ? h('div', { class: 'banner info', style: 'margin-top:.6rem' }, 'Hast du die Seite selbst geprüft und das Ergebnis stimmt (auch „keine Stellen“)? ',
+      h('button', { class: 'btn small primary', type: 'button', onclick: () => { put('employers', { ...e, confirm: { url: e.url, at: new Date().toISOString() } }); toast('Als geprüft bestätigt. Gilt ab dem nächsten Abruf auch für die Stellen.', 'ok'); close(); } }, 'Ergebnis ist richtig'))
+    : (isConfirmed(e) ? h('p', { class: 'muted small' }, 'Von dir bestätigt. ', h('button', { class: 'btn ghost small', type: 'button', onclick: () => { const { confirm, ...rest } = e; put('employers', { ...rest, confirm: null }); toast('Bestätigung zurückgenommen', 'ok'); close(); } }, 'Zurücknehmen')) : null);
+  const diagBox = test.diag ? h('details', { class: 'log', style: 'margin-top:.6rem' }, h('summary', null, 'Diagnose (bei Problemen an Claude schicken)'),
+    h('div', { style: 'padding:0 1rem 1rem' }, h('button', { class: 'btn small', type: 'button', onclick: async () => { try { await navigator.clipboard.writeText(`${e.name}\n${e.url}\nMeldung: ${test.message || ''}\n${test.diag}`); toast('Diagnose kopiert', 'ok'); } catch { toast('Kopieren nicht möglich – Text markieren und kopieren', 'bad'); } } }, 'Diagnose kopieren'),
+      h('pre', { style: 'white-space:pre-wrap;font-size:.75rem;max-height:14rem;overflow:auto;margin-top:.5rem' }, test.diag))) : null;
+  return h('div', null, confirmBtn, diagBox,
     h('div', { class: 'row' }, statusPill(test.status, test.message), test.confidence && test.confidence !== 'keine' ? h('span', { class: 'chip' }, 'Sicherheit: ' + test.confidence) : null, test.method ? h('span', { class: 'chip' }, 'Erkennung: ' + methodName(test.method)) : null, h('span', { class: 'muted small' }, test.checkedAt ? 'geprüft ' + fmtRel(test.checkedAt) : '')),
     test.message ? h('p', { style: 'margin-top:.5rem' }, test.message) : null,
     blocked ? h('div', { class: 'banner' }, 'Die Karriereseite lässt sich nicht automatisch abrufen. ', h('button', { class: 'btn small', type: 'button', onclick: () => { put('employers', { ...e, baSearch: true }); toast('Ab dem nächsten Abruf werden die Stellen über die Bundesagentur gesucht.', 'ok'); close(); } }, 'Stellen über die Bundesagentur suchen')) : null,
@@ -21,7 +31,7 @@ function testPanel(e, test, close) {
     (test.sample || []).length ? [h('h3', null, `Stichprobe (${test.count ?? test.sample.length} Stellen insgesamt)`), h('ul', { class: 'sample' }, test.sample.map(x => h('li', null, x.url ? h('a', { href: x.url, target: '_blank', rel: 'noopener noreferrer' }, x.title) : x.title, x.location ? h('span', { class: 'muted small' }, ' · ' + x.location) : null)))] : null,
     sug.length ? [h('h3', { style: 'margin-top:1rem' }, 'Gefundene Adressen'), sug.map(s => h('div', { class: 'row', style: 'margin-bottom:.4rem' }, h('div', { class: 'grow' }, h('a', { href: s.url, target: '_blank', rel: 'noopener noreferrer', class: 'mono' }, s.url), s.reason ? h('div', { class: 'muted small' }, s.reason) : null), h('button', { class: 'btn small', type: 'button', onclick: () => { put('employers', { ...e, oldUrl: e.url, url: s.url, urlStatus: 'aktualisiert', note: (e.note ? e.note + ' · ' : '') + 'Adresse aus Test übernommen' }); toast('Adresse übernommen – wird beim nächsten Lauf geprüft', 'ok'); close(); } }, 'Übernehmen')))] : null);
 }
-const methodName = m => ({ jsonld: 'Strukturierte Daten (JSON-LD)', successfactors: 'SuccessFactors-Liste', liste: 'Wiederkehrende Liste', workday: 'Workday-Schnittstelle', ba: 'Bundesagentur-Schnittstelle' }[m] || m);
+const methodName = m => ({ jsonld: 'Strukturierte Daten (JSON-LD)', successfactors: 'SuccessFactors-Liste', liste: 'Wiederkehrende Liste', workday: 'Workday-Schnittstelle', ueberschriften: 'Stellen-Überschriften', ba: 'Bundesagentur-Schnittstelle' }[m] || m);
 
 export function openEmployer(id, after = () => {}) {
   const ex = id ? get('employers', id) : null;

@@ -186,23 +186,32 @@ export function pageScript() {
   }
 
   // ---- Weiter-Link / „Mehr laden“ ----
+  const ARROW = '(weiter|next|nächste( seite)?|naechste( seite)?|›|»|>|→|▶|►|▸|❯|⟩|>>|vor)';
+  const NEXTRX = new RegExp('^\\s*' + ARROW + '\\s*$', 'i');
+  const lbl = (a) => clean(a.textContent) || clean([...a.querySelectorAll('img')].map(i => i.alt || i.title).join(' ')) || clean(a.getAttribute('aria-label') || a.getAttribute('title'));
+  const realHref = (h) => !!h && !/^(#|javascript:)/i.test(h.trim());
   const nextA = [...document.querySelectorAll('a[href]')].find(a => {
-    const t = clean(a.textContent) + ' ' + (a.getAttribute('aria-label') || '') + ' ' + (a.getAttribute('title') || '');
-    return (a.rel && /next/i.test(a.rel)) || /^(weiter|next|nächste( seite)?|›|»|>|vor)\s*$/i.test(clean(a.textContent)) || /(next page|nächste seite)/i.test(t);
+    if (!realHref(a.getAttribute('href'))) return false;
+    const t = lbl(a) + ' ' + (a.getAttribute('aria-label') || '') + ' ' + (a.getAttribute('title') || '');
+    return (a.rel && /next/i.test(a.rel)) || NEXTRX.test(lbl(a)) || /(next page|nächste seite|naechste seite)/i.test(t) || /paginationItemNext|pagination-next|page-next/i.test(a.className || '');
   });
-  if (nextA && !/#$/.test(nextA.getAttribute('href') || '#')) out.next = abs(nextA.getAttribute('href'));
+  if (nextA) out.next = abs(nextA.getAttribute('href'));
   // „Mehr laden“ (Schaltfläche, Link ohne neue Seite, Eingabefeld) – wird für Playwright markiert
   document.querySelectorAll('[data-jobsuche-more],[data-jobsuche-next]').forEach(n => { n.removeAttribute('data-jobsuche-more'); n.removeAttribute('data-jobsuche-next'); });
   const MORE = /(mehr\s+(jobs|stellen|ergebnisse|angebote|anzeigen|laden)|weitere\s+(jobs|stellen|ergebnisse|angebote|anzeigen|laden)|(jobs|stellen|ergebnisse|angebote)\s+(laden|nachladen|anzeigen)|(load|show|view|see|display)\s+(more|all)|more\s+(jobs|results|positions|vacancies|openings)|alle\s+(stellen|jobs)\s+(laden|anzeigen)|^\s*(mehr|more|weitere|weitere laden|laden)\s*[+▾▼↓⌄]?\s*$)/i;
-  const NEXTB = /^\s*(weiter|next|nächste( seite)?|naechste( seite)?|›|»|>|→|vor)\s*$/i;
+  const NEXTB = NEXTRX;
   const samePage = (a) => { const h = a.getAttribute('href'); if (!h || h === '#' || /^javascript:/i.test(h)) return true; try { const u = new URL(h, location.href); return u.origin === location.origin && u.pathname === location.pathname && !u.search; } catch { return false; } };
   const clickables = [...document.querySelectorAll('button, a, [role="button"], input[type="button"], input[type="submit"], [class*="load-more" i], [class*="loadmore" i], [class*="show-more" i], [class*="more-jobs" i], [class*="pagination" i] [class*="next" i]')]
     .filter(b => vis(b) && !b.disabled && b.getAttribute('aria-disabled') !== 'true' && !b.closest('header, footer, [class*="cookie" i], [id*="cookie" i], [class*="consent" i]'));
   const label = (b) => clean(b.value || b.innerText || b.textContent) + ' ' + (b.getAttribute('aria-label') || '');
   const more = clickables.find(b => { const t = clean(b.value || b.innerText || b.textContent); return t.length <= 50 && MORE.test(t + ' ' + (b.getAttribute('aria-label') || '')) && (b.tagName !== 'A' || samePage(b)); });
   out.hasMore = !!more;
+  if (!more && !out.next) {
+    const ml = clickables.find(b => b.tagName === 'A' && !samePage(b) && realHref(b.getAttribute('href')) && clean(b.textContent).length <= 40 && MORE.test(clean(b.textContent)));
+    if (ml) out.moreHref = abs(ml.getAttribute('href'));
+  }
   if (more) more.setAttribute('data-jobsuche-more', '1');
-  const nextB = !more && clickables.find(b => (b.tagName !== 'A' || samePage(b)) && (NEXTB.test(clean(b.innerText || b.textContent)) || /(^|\b)(next|weiter|nächste|naechste)\b/i.test(b.getAttribute('aria-label') || '')) && clean(b.innerText || b.textContent).length <= 20);
+  const nextB = !more && clickables.find(b => (b.tagName !== 'A' || samePage(b)) && (NEXTB.test(lbl(b)) || /(^|\b)(next|weiter|nächste|naechste)\b/i.test((b.getAttribute('aria-label') || '') + ' ' + (b.getAttribute('title') || '')) || /next/i.test(b.className && b.className.baseVal === undefined ? b.className : '')) && lbl(b).length <= 20);
   out.hasNextBtn = !!nextB;
   if (nextB) nextB.setAttribute('data-jobsuche-next', '1');
   return out;
@@ -252,4 +261,34 @@ export function searchFormScript() {
     if (btn) { btn.setAttribute('data-jobsuche-submit', '1'); return true; }
   }
   return false;
+}
+
+/** „Einträge pro Seite“: größte Option wählen (läuft im Browser). Gibt true zurück, wenn etwas markiert wurde. */
+export function pageSizeScript() {
+  const clean = (x) => (x || '').replace(/\s+/g, ' ').trim();
+  document.querySelectorAll('[data-jobsuche-size]').forEach(n => n.removeAttribute('data-jobsuche-size'));
+  const RX = /(items|results|jobs|entries|einträge|eintraege|ergebnisse|stellen|treffer)\s*(per|pro|je|\/)\s*(page|seite)|per page|pro seite|je seite/i;
+  for (const sel of document.querySelectorAll('select')) {
+    const ctx = clean((sel.labels && sel.labels[0] && sel.labels[0].textContent) || '') + ' ' + clean(sel.getAttribute('aria-label')) + ' ' + clean(sel.parentElement && sel.parentElement.textContent).slice(0, 80) + ' ' + clean(sel.previousElementSibling && sel.previousElementSibling.textContent);
+    if (!RX.test(ctx)) continue;
+    const opts = [...sel.options].map(o => ({ v: o.value, n: parseInt(o.textContent.replace(/\D/g, ''), 10) })).filter(o => o.n > 0);
+    if (!opts.length) continue;
+    const best = opts.reduce((a, b) => (b.n > a.n ? b : a));
+    if (String(sel.value) === String(best.v)) return false;
+    sel.setAttribute('data-jobsuche-size', best.v);
+    return true;
+  }
+  return false;
+}
+
+/** Kurzbeschreibung der Seite für die Diagnose (läuft im Browser). */
+export function diagScript() {
+  const clean = (x) => (x || '').replace(/\s+/g, ' ').trim();
+  const cut = (x, n) => { x = clean(x); return x.length > n ? x.slice(0, n) + '…' : x; };
+  const heads = [...document.querySelectorAll('h1,h2,h3,h4,h5,h6,[role="heading"]')].map(e => e.tagName.toLowerCase() + ': ' + cut(e.innerText || e.textContent, 70)).filter(x => x.length > 6);
+  const btn = [...document.querySelectorAll('button, [role="button"], a[href^="#"], a[href^="javascript:"], select, input[type="button"], input[type="submit"]')].map(b => b.tagName.toLowerCase() + (b.className && typeof b.className === 'string' ? '.' + b.className.split(/\s+/).slice(0, 2).join('.') : '') + ': ' + cut(b.value || b.innerText || b.textContent || b.getAttribute('aria-label') || b.getAttribute('title'), 40)).slice(0, 25);
+  const links = [...document.querySelectorAll('a[href]')].map(a => cut(a.textContent, 50) + ' → ' + (a.getAttribute('href') || '').slice(0, 80)).filter(x => x.length > 6).slice(0, 25);
+  const h0 = [...document.querySelectorAll('h2,h3,h4')].find(e => /\(\s*[mwd]\s*[\/|]/i.test(e.textContent) || e.closest('a'));
+  const card = h0 ? (h0.closest('li, article, [class*="card" i], [class*="item" i], a') || h0.parentElement) : null;
+  return ['Seite: ' + location.href, 'Titel: ' + document.title, 'Überschriften (' + heads.length + '):', ...heads.slice(0, 25), 'Bedienelemente:', ...btn, 'Links (Auswahl):', ...links, card ? 'Beispiel-Karte: ' + clean(card.outerHTML).slice(0, 900) : ''].join('\n');
 }

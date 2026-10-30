@@ -1,9 +1,28 @@
 // Versionsverlauf – wird in der App unter „Info“ angezeigt.
 // Bei jeder Änderung: neuen Eintrag OBEN einfügen, VERSION erhöhen und in sw.js die CACHE-Version anpassen.
 
-export const VERSION = '1.0.13';
+export const VERSION = '1.0.15';
 
 export const CHANGELOG = [
+  {
+    version: '1.0.15',
+    date: '2026-10-30',
+    title: 'Entfernung auch für unbekannte Orte',
+    items: [
+      'Wenn ein Ort weder in der eingebauten Liste steht noch über die Ortssuche gefunden wird (z. B. „89407 Dillingen an der Donau“), schätzt der Abruf die Entfernung jetzt über die Postleitzahl. Solche Stellen fallen dadurch aus dem Umkreis heraus. Die Entfernung ist Luftlinie und bei diesem Notbehelf nur grob.',
+    ],
+  },
+  {
+    version: '1.0.14',
+    date: '2026-10-30',
+    title: 'Prüfung bestätigen, Seitenwechsel, Diagnose',
+    items: [
+      'Quellen-Test: Bei „unsicher“ gibt es jetzt „Ergebnis ist richtig“. Damit bestätigst du eine manuell geprüfte Quelle; sie gilt dann nicht mehr als unklar (zurücknehmbar, verfällt bei geänderter Adresse).',
+      'SuccessFactors-Seiten mit mehreren Seiten (Eberspächer, Grimme …): „Einträge pro Seite“ wird auf den größten Wert gestellt, Pfeile (▶, Bild-Pfeile, Javascript-Links) werden als „Weiter“ erkannt.',
+      '„Alle Jobs anzeigen“ als Link auf eine eigene Ergebnisseite (Bosch) wird verfolgt.',
+      'Quellen-Test: „Diagnose“ zum Kopieren (Überschriften, Schaltflächen, Beispiel-Karte) – damit lassen sich schwierige Seiten schnell einordnen.',
+    ],
+  },
   {
     version: '1.0.13',
     date: '2026-10-30',

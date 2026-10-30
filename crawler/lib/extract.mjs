@@ -1,5 +1,5 @@
 // Ruft eine Karriereseite mit einem echten Browser (Playwright/Chromium) ab und erkennt die Stellenliste.
-import { pageScript, consentScript, discoverScript, searchFormScript } from './pagescript.mjs';
+import { pageScript, consentScript, discoverScript, searchFormScript, pageSizeScript, diagScript } from './pagescript.mjs';
 import { evaluate } from './validate.mjs';
 import { crawlWorkday, isWorkday } from './adapters.mjs';
 
@@ -18,7 +18,7 @@ export async function crawlPage(context, startUrl, { maxPages = 12, maxLoadMore 
   const deadline = Date.now() + budgetMs;
   const page = await context.newPage();
   const all = new Map();
-  let httpStatus = 0, finalUrl = startUrl, method = '', hint = null, text = '', pages = 0, error = '', searchSubmitted = false;
+  let httpStatus = 0, finalUrl = startUrl, method = '', hint = null, text = '', pages = 0, error = '', searchSubmitted = false, diag = '';
   try {
     const resp = await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
     httpStatus = resp ? resp.status() : 0;
@@ -30,6 +30,16 @@ export async function crawlPage(context, startUrl, { maxPages = 12, maxLoadMore 
       pages++;
       await autoScroll(page);
       let res = await page.evaluate(pageScript);
+      // „Einträge pro Seite“ auf den größten Wert stellen, wenn die Seite mehr Stellen nennt als sichtbar sind
+      if (p === 0 && res.hint && res.hint > res.items.length && await page.evaluate(pageSizeScript).catch(() => false)) {
+        const sz = page.locator('[data-jobsuche-size]').first();
+        const v = await sz.getAttribute('data-jobsuche-size').catch(() => null);
+        if (v != null && await sz.selectOption(v, { timeout: 3000 }).then(() => true).catch(() => false)) {
+          await page.waitForTimeout(900); await settle(page, 5000);
+          const r3 = await page.evaluate(pageScript);
+          if (r3.items.length >= res.items.length) res = r3;
+        }
+      }
       // Keine Liste, aber eine Suchmaske? Leer abschicken – viele Seiten zeigen dann alle Stellen.
       if (p === 0 && !res.items.length && await page.evaluate(searchFormScript).catch(() => false)) {
         const before = page.url();
@@ -47,6 +57,7 @@ export async function crawlPage(context, startUrl, { maxPages = 12, maxLoadMore 
       let prevCount = firstCount, stall = 0;
       for (let k = 0; k < maxLoadMore && Date.now() < deadline; k++) {
         if ((target && res.items.length >= target) || res.items.length >= maxItems) break;
+        if (!res.hasMore && (res.next || res.hasNextBtn)) break; // Seitenwechsel statt Nachladen: nicht erst nach unten scrollen
         let acted = false;
         if (res.hasMore) {
           const btn = page.locator('[data-jobsuche-more="1"]').first();
@@ -62,11 +73,12 @@ export async function crawlPage(context, startUrl, { maxPages = 12, maxLoadMore 
         if (res.items.length > prevCount) { prevCount = res.items.length; stall = 0; }
         else if (++stall >= (acted ? 2 : 2)) break;
       }
-      if (p === 0) { text = res.text; hint = res.hint; method = res.method; }
+      if (p === 0) { text = res.text; hint = res.hint; method = res.method; diag = await page.evaluate(diagScript).catch(() => ''); }
       if (!method && res.method) method = res.method;
       let added = 0;
       for (const it of res.items) if (!all.has(it.url)) { all.set(it.url, it); added++; }
       if (!added || Date.now() > deadline) break;
+      if (!res.next && !res.hasNextBtn && !res.hasMore && res.moreHref) res.next = res.moreHref; // „Alle Jobs anzeigen“ führt auf eine eigene Ergebnisseite
       if (!res.next && !res.hasNextBtn && !res.hasMore && res.method === 'successfactors' && res.items.length >= 10) {
         // SuccessFactors-Suche: Folgeseiten über „startrow“ (auch wenn kein „Weiter“-Link erkennbar ist)
         const u = new URL(page.url()); const size = res.items.length;
@@ -86,7 +98,7 @@ export async function crawlPage(context, startUrl, { maxPages = 12, maxLoadMore 
   } catch (e) {
     error = /net::ERR|Timeout|ERR_/.test(e.message) ? e.message.split('\n')[0] : e.message;
   } finally { await page.close().catch(() => {}); }
-  return { items: [...all.values()], httpStatus, finalUrl, method, hint, text, pages, error, searchSubmitted };
+  return { items: [...all.values()], httpStatus, finalUrl, method, hint, text, pages, error, searchSubmitted, diag };
 }
 
 /** Sucht auf der Startseite der Domain nach der aktuellen Karriere-/Stellenseite. */
@@ -201,7 +213,7 @@ export async function crawlEmployer(context, emp, { discover = true, altContext 
     items: raw.items,
     test: {
       ...test, method: raw.method || '', httpStatus: raw.httpStatus, finalUrl: raw.finalUrl, checkedAt: new Date().toISOString(), durationMs: Date.now() - t0,
-      sample: raw.items.slice(0, 6).map(i => ({ title: i.title, url: i.url, location: i.location || '' })), suggestions: suggestions.slice(0, 4), url: emp.url,
+      diag: raw.diag || '', sample: raw.items.slice(0, 6).map(i => ({ title: i.title, url: i.url, location: i.location || '' })), suggestions: suggestions.slice(0, 4), url: emp.url,
     },
   };
 }
