@@ -1,9 +1,29 @@
 // Versionsverlauf – wird in der App unter „Info“ angezeigt.
 // Bei jeder Änderung: neuen Eintrag OBEN einfügen, VERSION erhöhen und in sw.js die CACHE-Version anpassen.
 
-export const VERSION = '1.0.19';
+export const VERSION = '1.0.21';
 
 export const CHANGELOG = [
+  {
+    version: '1.0.21',
+    date: '2026-10-30',
+    title: 'Zeugnis-Bewertung mit Noten',
+    items: [
+      'Beim Hochladen eines Arbeitszeugnisses wird es bewertet: Gesamtnote (1–5), Einzelnoten (Leistung, Arbeitsweise, Verhalten, Schlussformel …), auffällige Formulierungen mit Bedeutung, Stärken, Schwächen und fehlende Bestandteile. Ein Klick auf das Zeugnis (oder „Note …“) zeigt die Einschätzung samt Notensystem.',
+      'Die Bewertung nutzt den KI-Zugang aus Info → Einstellungen (der Zeugnistext geht an Claude). Ohne Zugang gibt es eine Note nur aus der Zufriedenheitsformel („stets zur vollen Zufriedenheit“ = 2). „Erneut bewerten“ ist jederzeit möglich.',
+    ],
+  },
+  {
+    version: '1.0.20',
+    date: '2026-10-30',
+    title: 'Zeugnisse aufteilen, Abruf-Meldung, Einstellungen zuerst',
+    items: [
+      'Dokumente → Arbeitszeugnis hochladen: Ein Sammel-PDF wird automatisch in einzelne Zeugnisse geteilt, nach Arbeitgeber und Jahr benannt und mit dem neuesten zuerst abgelegt. Vor dem Speichern lassen sich Arbeitgeber, Jahr und Seiten korrigieren. Bei Scans ohne Text trägst du die Seitenbereiche selbst ein.',
+      'Neue Kategorie „Abschlusszeugnis (Master)“.',
+      'Info: „Einstellungen“ stehen jetzt vor dem Versionsverlauf.',
+      'Abruf-Meldung: Die App prüft bei GitHub, ob der Lauf wirklich fertig oder gescheitert ist, statt nach 15 Minuten aufzugeben (Gesamtabrufe dauern oft länger). Der Crawler speichert bereits nach dem Abruf der Karriereseiten einen Zwischenstand und beginnt höchstens 100 Minuten lang neue Quellen.',
+    ],
+  },
   {
     version: '1.0.19',
     date: '2026-10-30',

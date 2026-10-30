@@ -68,26 +68,45 @@ export async function triggerCrawl(only = '') {
 const RK = 'jobsuche.run';
 let watching = false;
 export const isWatching = () => watching;
-export function watchForResult(onDone, { everyMs = 20000, maxMs = 15 * 60000, resume = null } = {}) {
+/** Zustand des letzten GitHub-Laufs (braucht den GitHub-Zugang): { status, conclusion, url } oder null. */
+export async function runStatus() {
+  const g = settings().github || {};
+  if (!canTrigger()) return null;
+  try {
+    const r = await fetch(`https://api.github.com/repos/${g.owner}/${g.repo}/actions/workflows/crawl.yml/runs?per_page=1`, { headers: { Authorization: 'Bearer ' + ghToken(), Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' } });
+    if (!r.ok) return null;
+    const run = ((await r.json()).workflow_runs || [])[0];
+    return run ? { status: run.status, conclusion: run.conclusion, url: run.html_url, startedAt: run.run_started_at } : null;
+  } catch { return null; }
+}
+
+export function watchForResult(onDone, { everyMs = 20000, maxMs = 120 * 60000, resume = null } = {}) {
   if (watching) return;
   watching = true;
   const before = resume ? resume.before : S.jobs.generatedAt, t0 = resume ? resume.t0 : Date.now();
   try { localStorage.setItem(RK, JSON.stringify({ before, t0 })); } catch { /* ohne Speicher */ }
-  const finish = ok => {
+  const finish = (ok, msg) => {
     watching = false;
     try { localStorage.removeItem(RK); } catch { /* egal */ }
-    notice(ok ? 'Der Abruf ist abgeschlossen. Die neuen Stellen sind geladen.' : 'Der Abruf hat nach 15 Minuten kein Ergebnis geliefert. Bitte in GitHub unter „Actions“ nachsehen.', ok ? 'ok' : 'bad');
+    notice(msg || (ok ? 'Der Abruf ist abgeschlossen. Die neuen Stellen sind geladen.' : 'Der Abruf hat kein Ergebnis geliefert. Bitte in GitHub unter „Actions“ nachsehen.'), ok ? 'ok' : 'bad');
     onDone && onDone(ok);
   };
+  let n = 0;
   const tick = async () => {
     try { await pullJobs(); } catch { /* nächster Versuch */ }
-    if (S.jobs.generatedAt !== before) { finish(true); return; }
-    if (Date.now() - t0 > maxMs) { finish(false); return; }
+    if (S.jobs.generatedAt !== before && !S.jobs.partial) { finish(true); return; }
+    // Alle 2 Minuten den echten Zustand bei GitHub prüfen (statt nur zu raten)
+    if (n++ % 6 === 5) {
+      const rs = await runStatus();
+      if (rs && rs.status === 'completed' && rs.conclusion && rs.conclusion !== 'success') { finish(false, `Der Abruf bei GitHub ist nicht erfolgreich beendet worden (${rs.conclusion}). Details unter „Actions“ in GitHub.`); return; }
+      if (rs && rs.status === 'completed' && rs.conclusion === 'success') { await pullJobs().catch(() => {}); finish(true, 'Der Abruf ist abgeschlossen. Die neuen Stellen sind geladen.'); return; }
+    }
+    if (Date.now() - t0 > maxMs) { finish(false, 'Der Abruf läuft seit über 2 Stunden. Bitte in GitHub unter „Actions“ nachsehen.'); return; }
     setTimeout(tick, everyMs);
   };
   setTimeout(tick, everyMs);
 }
 /** Beim Start: einen noch laufenden Abruf weiter beobachten. */
 export function resumeWatch() {
-  try { const r = JSON.parse(localStorage.getItem(RK) || 'null'); if (r && Date.now() - r.t0 < 15 * 60000) watchForResult(null, { resume: r }); else if (r) localStorage.removeItem(RK); } catch { /* ignorieren */ }
+  try { const r = JSON.parse(localStorage.getItem(RK) || 'null'); if (r && Date.now() - r.t0 < 120 * 60000) watchForResult(null, { resume: r }); else if (r) localStorage.removeItem(RK); } catch { /* ignorieren */ }
 }

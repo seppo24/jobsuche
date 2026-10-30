@@ -157,8 +157,8 @@ export function render(el) {
     h('div', { class: 'card' }, h('div', { class: 'row' }, h('div', { class: 'grow' }, h('h2', { style: 'margin:0' }, 'Jobsuche'), h('span', { class: 'muted' }, 'Version ' + VERSION)),
       h('button', { class: 'btn', type: 'button', onclick: async () => { try { if (navigator.serviceWorker) { const r = await navigator.serviceWorker.getRegistration(); await r?.update(); } await pull(); toast('Auf Updates geprüft und abgeglichen', 'ok'); } catch (e) { toast(e.message, 'bad'); } } }, 'Nach Update suchen')),
       h('p', { class: 'muted small', style: 'margin-top:.75rem' }, `Abgleich: ${dbx.isConnected() ? (sy.state === 'error' ? 'Fehler – ' + sy.msg : sy.lastSync ? 'zuletzt ' + fmtRel(sy.lastSync) : 'bereit') : 'Dropbox nicht verbunden – Daten nur auf diesem Gerät'} · Stellenstand: ${jobs.generatedAt ? fmtRel(jobs.generatedAt) : 'noch kein Abruf'}`)),
-    h('h2', null, 'Versionsverlauf'),
-    CHANGELOG.map((c, i) => h('details', { class: 'log', open: i === 0 }, h('summary', null, 'Version ' + c.version, h('span', { class: 'muted small' }, fmtDate(c.date) + ' · ' + c.title)), h('ul', null, c.items.map(x => h('li', null, x))))),
-    h('h2', { style: 'margin-top:1.5rem' }, 'Einstellungen'),
-    installSection(), dropboxSection(), profileSection(), searchSection(), crawlerSection(), aiSection(), dataSection());
+    h('h2', { style: 'margin-top:1rem' }, 'Einstellungen'),
+    installSection(), dropboxSection(), profileSection(), searchSection(), crawlerSection(), aiSection(), dataSection(),
+    h('h2', { style: 'margin-top:1.5rem' }, 'Versionsverlauf'),
+    CHANGELOG.map((c, i) => h('details', { class: 'log', open: i === 0 }, h('summary', null, 'Version ' + c.version, h('span', { class: 'muted small' }, fmtDate(c.date) + ' · ' + c.title)), h('ul', null, c.items.map(x => h('li', null, x))))));
 }

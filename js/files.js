@@ -3,16 +3,16 @@ import { uid, safeName, nowIso } from './util.js';
 import * as dbx from './dropbox.js';
 import { put, del, get } from './store.js';
 
-export const CATEGORIES = [['lebenslauf', 'Lebenslauf'], ['anschreiben', 'Anschreiben'], ['arbeitszeugnisse', 'Arbeitszeugnisse'], ['zeugnisse', 'Schul- und Studienzeugnisse'], ['zertifikate', 'Zertifikate'], ['bewerbungen', 'Fertige Bewerbungen'], ['sonstiges', 'Sonstiges']];
+export const CATEGORIES = [['lebenslauf', 'Lebenslauf'], ['anschreiben', 'Anschreiben'], ['arbeitszeugnisse', 'Arbeitszeugnisse'], ['abschlusszeugnis', 'Abschlusszeugnis (Master)'], ['zeugnisse', 'Schul- und Studienzeugnisse'], ['zertifikate', 'Zertifikate'], ['bewerbungen', 'Fertige Bewerbungen'], ['sonstiges', 'Sonstiges']];
 export const catLabel = k => (CATEGORIES.find(c => c[0] === k) || [0, k])[1];
 
-export async function uploadDocument(file, category, { name, note } = {}) {
+export async function uploadDocument(file, category, { name, note, employer, year } = {}) {
   if (!dbx.isConnected()) throw new Error('Bitte zuerst Dropbox verbinden (Info → Einstellungen).');
   const fname = safeName(name || file.name);
   const dir = `${dbx.ROOT}/Dokumente/${category}`;
   await dbx.ensureFolder(dbx.ROOT); await dbx.ensureFolder(dbx.ROOT + '/Dokumente'); await dbx.ensureFolder(dir);
   const res = await dbx.upload(`${dir}/${fname}`, file);
-  return put('documents', { id: uid('doc'), name: res.name || fname, category, path: res.path_display || `${dir}/${fname}`, size: file.size, mime: file.type || '', note: note || '', uploadedAt: nowIso() });
+  return put('documents', { id: uid('doc'), name: res.name || fname, category, path: res.path_display || `${dir}/${fname}`, size: file.size, mime: file.type || '', note: note || '', employer: employer || undefined, year: year || undefined, uploadedAt: nowIso() });
 }
 export async function openDocument(doc) {
   const url = await dbx.tempLink(doc.path);

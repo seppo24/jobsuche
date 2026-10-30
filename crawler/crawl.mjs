@@ -11,7 +11,8 @@ import { loadGazetteer } from './lib/gazetteer.mjs';
 import { synonymsFromText, matchTitle, parseQuery } from '../js/search.js';
 
 const ONLY = (process.env.ONLY || '').trim();
-const CONCURRENCY = +(process.env.CONCURRENCY || 4);
+const CONCURRENCY = +(process.env.CONCURRENCY || 6);
+const CRAWL_DEADLINE = Date.now() + 100 * 60000; // nach 100 Minuten werden keine neuen Quellen mehr begonnen (alte Stände bleiben)
 const SOURCE_TIMEOUT = +(process.env.SOURCE_TIMEOUT || 210000);
 const NOW = new Date().toISOString();
 const PORTAL_LINK_ONLY = new Set(['stepstone', 'linkedin', 'indeed', 'xing']);
@@ -69,7 +70,7 @@ let idx = 0;
 
 async function worker() {
   const ctx = await mkContext();
-  while (idx < todo.length) {
+  while (idx < todo.length && Date.now() < CRAWL_DEADLINE) {
     const emp = todo[idx++];
     const t0 = Date.now();
     try {
@@ -99,6 +100,7 @@ async function worker() {
   await ctx.close();
 }
 await Promise.all(Array.from({ length: Math.min(CONCURRENCY, todo.length || 1) }, worker));
+if (idx < todo.length) log(`Zeitlimit erreicht: ${todo.length - idx} Quellen nicht abgerufen (bisheriger Stand bleibt erhalten)`);
 
 // ---- Zusammenführen mit dem letzten Stand ----
 const jobs = [];
@@ -132,10 +134,14 @@ for (const emp of todo) {
   }
 }
 // Quellen, die in diesem Lauf nicht dran waren, behalten ihre Stellen
-const touched = new Set(todo.map(e => e.id));
+const touched = new Set(todo.filter(e => results.has(e.id)).map(e => e.id));
 const alive = new Set(employers.map(e => e.id));
 for (const j of prev.jobs || []) if (!touched.has(j.employerId) && alive.has(j.employerId)) jobs.push(j);
 for (const k of Object.keys(sources)) if (!alive.has(k)) delete sources[k];
+
+// Zwischenstand sofort speichern (die App zeigt die neuen Stellen schon, auch wenn die späteren Schritte lange dauern)
+await store.write('jobs.json', JSON.stringify({ generatedAt: NOW, partial: true, version: 1, sources, geo, jobs: [...jobs].sort((a, b) => (b.firstSeen || '').localeCompare(a.firstSeen || '')) }));
+log('Zwischenstand gespeichert:', jobs.length, 'Stellen');
 
 // ---- Fehlender Einsatzort: Detailseite der Stelle lesen (jede Stelle einmal je Verfahrensversion; passende Stellen zuerst) ----
 const LOC_V = 4;
@@ -204,6 +210,6 @@ await browser.close();
 if (altBrowser) await altBrowser.close();
 
 jobs.sort((a, b) => (b.firstSeen || '').localeCompare(a.firstSeen || ''));
-const out = { generatedAt: NOW, version: 1, sources, geo, jobs };
+const out = { generatedAt: new Date().toISOString(), version: 1, sources, geo, jobs };
 await store.write('jobs.json', JSON.stringify(out));
 log(`Fertig: ${jobs.length} Stellen aus ${Object.keys(sources).length} Quellen · ${nDesc} Beschreibungen geladen`);
